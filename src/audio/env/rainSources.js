@@ -27,7 +27,12 @@ function* stereoLoop(ctx, seconds, fill, seed, { rmsTarget = null, peakTarget = 
   }
   // normalizzazione: a livello medio (gli strati si dosano tra loro) o di picco
   let peak = 0, sum = 0;
-  for (const d of chans) for (let i = 0; i < len; i++) { const a = Math.abs(d[i]); if (a > peak) peak = a; sum += d[i] * d[i]; }
+  for (const d of chans) {
+    for (let i = 0; i < len; i++) {
+      if ((i & (YIELD_EVERY - 1)) === 0) yield;
+      const a = Math.abs(d[i]); if (a > peak) peak = a; sum += d[i] * d[i];
+    }
+  }
   const rms = Math.sqrt(sum / (2 * len));
   const k = rmsTarget ? rmsTarget / (rms || 1) : peakTarget / (peak || 1);
   const buf = ctx.createBuffer(2, len, sr);
@@ -51,49 +56,62 @@ function* whiteFill(out, sr, rng) {
 }
 
 // ── gocce ────────────────────────────────────────────────────────────────
-// ogni goccia è un breve impulso di rumore filtrato che decade in pochi millisecondi;
-// alcune hanno un "plin" (sinusoide smorzata) come una goccia su una superficie
+// Ogni goccia è un breve impulso di rumore con attacco arrotondato (niente clic secchi),
+// coda di pochi millisecondi e un colore leggermente diverso dalle altre.
+// Più voci si sovrappongono, come gocce vere che cadono insieme.
+// Niente note intonate: sommate a tante gocce davano un timbro metallico (misura in report).
 const DROP_LAYERS = {
-  light: { perSec: 28, decay: [0.003, 0.009], hp: 0.25, lp: 0.55, ampSkew: 2.2, plink: 0.16 },
-  mid: { perSec: 150, decay: [0.002, 0.006], hp: 0.18, lp: 0.6, ampSkew: 1.6, plink: 0.05 },
-  heavy: { perSec: 650, decay: [0.0012, 0.004], hp: 0.08, lp: 0.7, ampSkew: 1.2, plink: 0.01, sheet: 0.35 },
+  // pioggia leggera: ticchettio fitto e morbido, non scoppiettii isolati
+  // hp: quanto si tolgono i bassi; senza, le gocce leggere sembravano piccoli tonfi (crepitio da camino)
+  light: { seconds: 12, perSec: 220, amp: [0.25, 0.6], attack: 0.0006, decay: [0.002, 0.006], lp: [0.18, 0.45], hp: 0.3, voices: 6 },
+  mid: { seconds: 10, perSec: 900, amp: [0.2, 0.6], attack: 0.0004, decay: [0.0015, 0.004], lp: [0.25, 0.55], hp: 0.22, voices: 8 },
+  // scroscio: gocce fittissime e un velo d'acqua continuo
+  heavy: { seconds: 8, perSec: 2600, amp: [0.2, 0.5], attack: 0.0003, decay: [0.001, 0.003], lp: [0.3, 0.65], hp: 0.12, voices: 10, sheet: 0.4 },
 };
+
+const DROP_YIELD = 4096;
 
 function dropFill(layer) {
   const L = DROP_LAYERS[layer];
   return function* (out, sr, rng) {
-    let drop = 0, decay = 0.99, hpState = 0, lpState = 0;
-    let plinkAmp = 0, plinkDecay = 0.99, plinkPhase = 0, plinkStep = 0;
-    let sheetLp = 0;
+    const voices = Array.from({ length: L.voices }, () => ({ target: 0, env: 0, dec: 0, lp: 0, lpS: 0, hpS: 0, hpS2: 0 }));
+    const attackK = 1 - Math.exp(-1 / (sr * L.attack));
+    let next = 0, sheetLp = 0;
     const p = L.perSec / sr;
     const n = out.length;
     for (let i = 0; i < n; i++) {
-      if ((i & (YIELD_EVERY - 1)) === 0) yield;
+      // le gocce costano più del rumore semplice (un filtro per voce): blocchi più piccoli
+      if ((i & (DROP_YIELD - 1)) === 0) yield;
       if (rng() < p) {
-        drop = 0.15 + 0.85 * rng() ** L.ampSkew;
-        decay = Math.exp(-1 / (sr * (L.decay[0] + rng() * (L.decay[1] - L.decay[0]))));
-        if (rng() < L.plink) {
-          plinkAmp = 0.12 + 0.18 * rng();
-          plinkDecay = Math.exp(-1 / (sr * (0.012 + 0.03 * rng())));
-          plinkStep = (2 * Math.PI * (1500 + 3000 * rng())) / sr;
+        const v = voices[next];
+        next = (next + 1) % voices.length;
+        v.target = L.amp[0] + (L.amp[1] - L.amp[0]) * rng();
+        v.dec = Math.exp(-1 / (sr * (L.decay[0] + rng() * (L.decay[1] - L.decay[0]))));
+        v.lp = L.lp[0] + (L.lp[1] - L.lp[0]) * rng();
+      }
+      let sum = 0;
+      for (const v of voices) {
+        if (v.target > 0) {
+          v.env += (v.target - v.env) * attackK;
+          if (v.env >= v.target * 0.95) v.target = 0; // fine dell'attacco, inizia la coda
+        } else {
+          v.env *= v.dec;
         }
+        if (v.env < 1e-5) continue;
+        const w = rng() * 2 - 1;
+        // due passa-alto in serie (12 dB/ottava): la goccia è un suono acuto, senza tonfo
+        v.hpS += L.hp * (w - v.hpS);
+        const h1 = w - v.hpS;
+        v.hpS2 += L.hp * (h1 - v.hpS2);
+        v.lpS += v.lp * (h1 - v.hpS2 - v.lpS); // ammorbidisce gli acuti estremi
+        sum += v.lpS * v.env;
       }
-      drop *= decay;
-      plinkAmp *= plinkDecay;
-      plinkPhase += plinkStep;
-      const w = rng() * 2 - 1;
-      // passa-alto e passa-basso a un polo: la goccia non è un clic secco
-      hpState += L.hp * (w - hpState);
-      const hi = w - hpState;
-      lpState += L.lp * (hi - lpState);
-      let v = lpState * drop + Math.sin(plinkPhase) * plinkAmp;
       if (L.sheet) {
-        // velo d'acqua continuo della pioggia battente, che "ondeggia" lentamente
-        sheetLp += 0.35 * (w - sheetLp);
-        const sway = 0.7 + 0.3 * Math.sin((2 * Math.PI * 3 * i) / n);
-        v += sheetLp * L.sheet * sway;
+        // velo d'acqua della pioggia battente, che "ondeggia" lentamente
+        sheetLp += 0.35 * ((rng() * 2 - 1) - sheetLp);
+        sum += sheetLp * L.sheet * (0.75 + 0.25 * Math.sin((2 * Math.PI * 3 * i) / n));
       }
-      out[i] = v;
+      out[i] = sum;
     }
   };
 }
@@ -163,8 +181,12 @@ export const CRACK_VARIANTS = 3;
 /** Tutte le sorgenti della Pioggia. Ogni voce è una funzione che restituisce una Promise. */
 export function rainSources(ctx) {
   return {
+    // due rumori indipendenti: il fondo della pioggia e il vento non devono condividere
+    // la stessa materia prima (sommata a velocità diverse darebbe un timbro metallico)
     white: () => runAsync(stereoLoop(ctx, LOOP_S, whiteFill, 11, { rmsTarget: 0.2 })),
-    drops: (layer) => runAsync(stereoLoop(ctx, LOOP_S, dropFill(layer), { light: 21, mid: 22, heavy: 23 }[layer], { rmsTarget: 0.12 })),
+    windNoise: () => runAsync(stereoLoop(ctx, 9, whiteFill, 12, { rmsTarget: 0.2 })),
+    // strati di lunghezza diversa (12, 10, 8 s): insieme si ripetono solo ogni 2 minuti
+    drops: (layer) => runAsync(stereoLoop(ctx, DROP_LAYERS[layer].seconds, dropFill(layer), { light: 21, mid: 22, heavy: 23 }[layer], { rmsTarget: 0.12 })),
     rumble: (v) => runAsync(monoBuffer(ctx, 10 + (v % 2) * 3, 22050, rumbleFill, 100 + v)),
     crack: (v) => runAsync(monoBuffer(ctx, 0.7, ctx.sampleRate, crackFill, 200 + v)),
   };

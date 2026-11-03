@@ -132,10 +132,11 @@ test di unità in `tests/environments.test.js` e `tests/scheduler.test.js`.
 | Cambi rapidi senza accumulo né componenti obsolete | — | ✅ 10–15 sorgenti; caricamento tardivo ignorato | — |
 | Pausa, ripresa e fine timer su tutte le componenti | ✅ | ✅ | ⏳ iPhone |
 | Nessun evento arretrato alla ripresa | ✅ | ✅ dopo 120 s di pausa | — |
-| Mix più impegnativo senza saturazione, interfaccia reattiva | — | ✅ −0,4 dBFS, blocco massimo 79 ms | ⏳ iPhone |
-| **NAT-03** Leggera e battente diverse per carattere a livello simile | — | ✅ granularità 13,5 → 1,8 dB, loudness ±0,3 dB | ⏳ ascolto |
+| Mix più impegnativo senza saturazione, interfaccia reattiva | — | ✅ −0,5 dBFS, blocco massimo 61 ms | ⏳ iPhone |
+| **NAT-03** Leggera e battente diverse per carattere a livello simile | — | ✅ granularità 5,6 → 1,4 dB, loudness ±0,3 dB | ⏳ ascolto |
+| Timbro naturale, senza metallico né crepitio (segnalazione all'ascolto) | — | ✅ pettine 0,44 → 0,09; picchi tonali 14,2 → 1,8 dB | ⏳ riascolto |
 | Tuoni e vento indipendenti | ✅ | ✅ | — |
-| Frequenza, distanza e livello dei tuoni distinti | ✅ | ✅ 3 → 19 tuoni; 87 → 351 Hz | ⏳ ascolto |
+| Frequenza, distanza e livello dei tuoni distinti | ✅ | ✅ 3 → 19 tuoni; 99 → 425 Hz | ⏳ ascolto |
 | Burrasca non cambia pioggia né volume generale | ✅ | ✅ | — |
 | Leggera → temporale → leggera senza interrompere il timer | — | ✅ | ⏳ |
 | Configurazione ritrovata riaprendo l'app | — | ✅ | ⏳ |

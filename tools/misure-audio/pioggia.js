@@ -58,6 +58,90 @@ const lufs = (out) => {
   return +(-0.691 + 10 * Math.log10(ms)).toFixed(1);
 };
 
+// ── difetti di timbro ─────────────────────────────────────────────────────
+// Effetto "metallico" da copie ritardate (flanger, filtro a pettine): picco dell'autocorrelazione
+// normalizzata tra 0,3 e 25 ms, mediata su molte finestre. Rumore senza copie: vicino a 0.
+function combScore(out, fromS = 2) {
+  const d = out.getChannelData(0);
+  const N = 4096, maxLag = Math.floor(SR * 0.025), minLag = Math.floor(SR * 0.0003);
+  let total = 0, wins = 0;
+  for (let st = SR * fromS; st + N + maxLag < d.length && wins < 40; st += SR * 0.25, wins++) {
+    let e0 = 0; for (let i = 0; i < N; i++) e0 += d[st + i] * d[st + i];
+    let best = 0;
+    for (let lag = minLag; lag < maxLag; lag += 1) {
+      let c = 0, e1 = 0;
+      for (let i = 0; i < N; i += 2) { c += d[st + i] * d[st + i + lag]; e1 += d[st + i + lag] * d[st + i + lag]; }
+      const r = c / Math.sqrt((e0 / 2) * e1 + 1e-20);
+      if (r > best) best = r;
+    }
+    total += best;
+  }
+  return +(total / wins).toFixed(2);
+}
+
+// Note "metalliche" (risonanze strette): rapporto tra il picco dello spettro e la mediana
+// dei suoi vicini, tra 800 Hz e 8 kHz, sul massimo di molte finestre. Rumore liscio: pochi dB.
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) { let b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+  for (let len = 2; len <= n; len <<= 1) {
+    const a = (-2 * Math.PI) / len;
+    for (let i = 0; i < n; i += len) for (let k = 0; k < len / 2; k++) {
+      const wr = Math.cos(a * k), wi = Math.sin(a * k);
+      const xr = re[i + k + len / 2] * wr - im[i + k + len / 2] * wi, xi = re[i + k + len / 2] * wi + im[i + k + len / 2] * wr;
+      re[i + k + len / 2] = re[i + k] - xr; im[i + k + len / 2] = im[i + k] - xi; re[i + k] += xr; im[i + k] += xi;
+    }
+  }
+}
+function tonalScore(out, fromS = 2) {
+  const d = out.getChannelData(0), N = 8192;
+  const lo = Math.floor((800 / SR) * N), hi = Math.floor((8000 / SR) * N);
+  const avg = new Float64Array(N / 2);
+  let wins = 0;
+  for (let st = SR * fromS; st + N < d.length && wins < 60; st += N / 2, wins++) {
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = d[st + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+    fft(re, im);
+    for (let k = 0; k < N / 2; k++) avg[k] += re[k] * re[k] + im[k] * im[k];
+  }
+  // spettro medio: un picco stabile (risonanza) sopravvive alla media, il rumore no
+  let worst = 0;
+  for (let k = lo; k < hi; k++) {
+    const nb = []; for (let j = k - 40; j <= k + 40; j++) if (j !== k) nb.push(avg[j]);
+    nb.sort((a, b) => a - b);
+    worst = Math.max(worst, avg[k] / (nb[nb.length >> 1] || 1e-20));
+  }
+  return +(10 * Math.log10(worst)).toFixed(1);
+}
+
+// corpo grave: quota di energia sotto i 500 Hz rispetto al totale (dB)
+function bodyShare(out, fromS = 2) {
+  const d = out.getChannelData(0), N = 8192;
+  const cut = Math.floor((500 / SR) * N);
+  let low = 0, all = 0, wins = 0;
+  for (let st = SR * fromS; st + N < d.length && wins < 60; st += N / 2, wins++) {
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = d[st + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+    fft(re, im);
+    for (let k = 1; k < N / 2; k++) { const e = re[k] * re[k] + im[k] * im[k]; all += e; if (k < cut) low += e; }
+  }
+  return +(10 * Math.log10(low / all)).toFixed(1);
+}
+
+window.timbro = async () => {
+  const rows = [];
+  for (const x of [0, 33, 66, 100]) {
+    const { out } = await render(rainOnly(x), 14);
+    const st = stats(out);
+    rows.push({ intensita: x, metallicoPettine: combScore(out), notePiccoDb: tonalScore(out), granularitaDb: st.granularitaDb, corpoGraveDb: bodyShare(out), crestDb: st.crestDb });
+  }
+  // pioggia e vento insieme: la stessa materia prima a velocità diverse crea il pettine
+  let c = setParam("rain", rainOnly(50), "wind", "on", true);
+  const { out } = await render(c, 14);
+  rows.push({ intensita: "50 + vento", metallicoPettine: combScore(out), notePiccoDb: tonalScore(out), granularitaDb: stats(out).granularitaDb, crestDb: stats(out).crestDb });
+  return { rows, comp: RAIN_CURVES.comp };
+};
+
 const rainOnly = (intensity) => setParam("rain", defaultConfig("rain"), "rain", "intensity", intensity);
 
 window.intensita = async () => {

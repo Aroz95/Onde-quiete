@@ -97,28 +97,51 @@ come correzione circoscritta, con misura prima e dopo usando gli script di quest
 ## Ambiente Pioggia (CR Ambienti naturali, NAT-03)
 
 Misure del 3 novembre 2026 con `node tools/misure-audio/pioggia.cjs`, rendering offline a 48 kHz,
-generatore casuale con seme (ripetibile). Nessun ascolto in cuffia ancora fatto.
+generatore casuale con seme (ripetibile). Nessun ascolto in cuffia ancora fatto da parte mia.
+
+### Timbro metallico e crepitio (segnalati all'ascolto, corretti)
+
+Al primo ascolto la pioggia suonava metallica e, all'intensità minima, crepitava come un camino.
+Abbassando il livello sparivano insieme il metallico e la pioggia: il difetto era nella sorgente stessa.
+
+Cause trovate:
+- ogni strato di gocce era suonato due volte, a velocità 1 e 0,971: due copie quasi uguali sommate
+  creano un effetto flanger, cioè il suono metallico;
+- il fondo d'acqua, il "corpo" e il vento usavano lo stesso rumore bianco a velocità diverse (stesso effetto);
+- piccoli toni sinusoidali ("plink") sulle gocce, percepiti come note metalliche;
+- gocce leggere rade, forti, con attacco istantaneo e molti bassi: ogni goccia era un clic con un tonfo.
+
+Correzioni: una sola copia per sorgente, rumore separato per il vento, niente toni, gocce leggere
+più fitte e morbide (attacco arrotondato) e con i bassi tagliati da un doppio filtro passa-alto.
+
+| Misura (Pioggia leggera) | Prima | Dopo | Cosa indica |
+|---|---|---|---|
+| Effetto pettine | 0,44 | 0,09 | ripetizione a 0,3–25 ms: il timbro metallico |
+| Picchi tonali | 14,2 dB | 1,8 dB | note che emergono tra 800 Hz e 8 kHz |
+| Granularità | 13,5 dB | 5,6 dB | gocce che spiccano come clic |
+| Energia sotto 500 Hz | −19,6 dB | −40,6 dB | il tonfo del crepitio (battente: −17,4 dB, il corpo dello scroscio) |
 
 ### Intensità: cambia la trama, non il volume
 
 | Intensità | Loudness | Brillantezza | Picco/medio | Granularità |
 |---|---|---|---|---|
-| Leggera (0) | −15,6 LUFS | 5.880 Hz | 20,2 dB | 13,5 dB |
-| Moderata (33) | −15,6 | 6.890 | 18,2 | 6,6 |
-| Intensa (66) | −15,5 | 7.480 | 17,3 | 3,5 |
-| Battente (100) | −15,3 | 7.760 | 15,8 | 1,8 |
+| Leggera (0) | −15,2 LUFS | 9.810 Hz | 18,2 dB | 5,6 dB |
+| Moderata (33) | −15,1 | 9.600 | 17,1 | 3,6 |
+| Intensa (66) | −14,9 | 8.830 | 16,0 | 2,1 |
+| Battente (100) | −14,9 | 8.020 | 15,5 | 1,4 |
 
 La granularità misura quanto i picchi brevi (finestre da 5 ms) emergono sul livello tipico:
 alta = gocce isolate, bassa = scroscio continuo. La loudness resta entro 0,3 dB grazie a una
-compensazione (senza, la Battente era 2,1 dB sopra la Leggera). Livello 75% al volume del 70%:
-−18,7 LUFS, pari al mediano degli altri preset.
+compensazione. Ora la Leggera è un ticchettio fine e chiaro, la Battente uno scroscio più pieno e
+con più corpo nei bassi (la brillantezza scende salendo d'intensità). Livello 75% al volume del 70%:
+circa −18,3 LUFS, vicino al mediano degli altri preset.
 
 ### Tuoni: la distanza cambia il colore, non solo il livello
 
 | Distanza | Picco | Brillantezza | Granularità |
 |---|---|---|---|
-| Lontani | −16,1 dB | 87 Hz | 18,6 dB |
-| Vicini | −8,7 dB | 351 Hz | 24,7 dB |
+| Lontani | −14,6 dB | 99 Hz | 15,8 dB |
+| Vicini | −8,2 dB | 425 Hz | 19,2 dB |
 
 Vicini: rimbombo più chiaro, attacco rapido e schiocco iniziale. Lontani: più gravi, ovattati,
 con attacco lento. In 4 minuti: 3 tuoni con frequenza "Rari", 19 con "Frequenti"; mai più di 2 sovrapposti.
@@ -128,25 +151,27 @@ con attacco lento. In 4 minuti: 3 tuoni con frequenza "Rari", 19 con "Frequenti"
 | Forza | Loudness | Brillantezza | Granularità |
 |---|---|---|---|
 | Brezza | −28,7 LUFS | 1.680 Hz | 3,8 dB |
-| Burrasca | −21,1 LUFS | 1.940 Hz | 6,7 dB (raffiche e ululato) |
+| Burrasca | −20,6 LUFS | 2.140 Hz | 8,1 dB (raffiche e ululato) |
 
 Prima della calibrazione il vento era 24 dB sotto la pioggia e quasi impercettibile: guadagno alzato di 11 dB.
 
 ### Caso peggiore
 
 Temporale con tutto al 100% (pioggia battente, tuoni vicini e frequenti, burrasca, raffiche frequenti),
-volume generale 100%: picco −0,4 dBFS, **nessun campione saturato**, picco/medio 13,5 dB (dinamica conservata).
+volume generale 100%: picco −0,5 dBFS, **nessun campione saturato**, picco/medio 13,6 dB (dinamica conservata), 10 sorgenti attive.
 Prima della correzione: +0,4 dBFS con 7 campioni saturati. Correzioni: raffiche di burrasca meno estreme
 e arrotondamento morbido di sicurezza sopra l'80% della scala, dopo il limitatore.
 
 ### Memoria
 
-Sorgenti della Pioggia: rumore bianco e tre strati di gocce (8 s stereo) circa 12 MB; tuoni (4 rimbombi
+Sorgenti della Pioggia: rumore del fondo (8 s), rumore del vento (9 s) e tre strati di gocce (12, 10 e 8 s,
+che insieme si ripetono solo ogni 2 minuti), stereo, circa 18 MB; tuoni (4 rimbombi
 a 22 kHz e 3 schiocchi) circa 4 MB, preparati solo quando si accendono. Il vecchio Temporale da solo
 occupava 17 MB. Le sorgenti si generano una volta e si riusano tornando alla Pioggia.
 
 ### Da ascoltare
 
+0. Il timbro metallico e il crepitio all'intensità minima sono spariti?
 1. Almeno 20 minuti di Pioggia leggera, intensa e Temporale: ripetitività della trama, click, picchi.
 2. Leggera e Battente a volume simile: si distinguono per carattere?
 3. Tuoni lontani e vicini: credibili? Lo schiocco dei vicini è fastidioso?

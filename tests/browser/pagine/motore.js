@@ -99,7 +99,10 @@ window.prove = {
     const inPause = c.starts.filter((s) => s > 30 && s < 150).length;
     const burst = c.starts.filter((s) => s >= 150 && s < 160).length;
     // le code dei tuoni già partiti prima della pausa durano al massimo una ventina di secondi
-    return { eventiInPausa: inPause, livelloInPausa: rmsDb(out, 60, 150), eventiNeiPrimi10sDopoLaRipresa: burst, primoDopoRipresa: +(Math.min(...c.starts.filter((s) => s >= 150)) - 150).toFixed(1) };
+    const after = c.starts.filter((s) => s >= 150).sort((a, b) => a - b);
+    const minSpacing = Math.min(...after.slice(1).map((s, i) => s - after[i]));
+    return { eventiInPausa: inPause, livelloInPausa: rmsDb(out, 60, 150), eventiNeiPrimi10sDopoLaRipresa: burst,
+      primoDopoRipresa: +(after[0] - 150).toFixed(1), distanzaMinimaDopoRipresa: +minSpacing.toFixed(1) };
   },
 
   // ambiente abbandonato mentre si prepara: il caricamento tardivo non lo riattiva

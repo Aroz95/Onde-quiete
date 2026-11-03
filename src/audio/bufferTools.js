@@ -48,6 +48,8 @@ export function runAsync(gen, budgetMs = 8) {
         reject(e);
       }
     };
-    step();
+    // primo blocco in un turno a parte: chi chiede il buffer (spesso un clic che aggiorna
+    // anche l'interfaccia) non somma il proprio lavoro a quello della generazione
+    setTimeout(step, 0);
   });
 }

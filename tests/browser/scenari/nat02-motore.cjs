@@ -19,9 +19,12 @@ module.exports = async function (browser, r) {
   r.check(s.nuoviEventiDopo === 0 && s.livelloDopo < -80, "dopo lo spegnimento non arrivano nuovi tuoni");
 
   const pa = await run("pausa");
-  r.info(`pausa di 120 s: eventi in pausa ${pa.eventiInPausa}, nei primi 10 s dopo la ripresa ${pa.eventiNeiPrimi10sDopoLaRipresa}, primo dopo ${pa.primoDopoRipresa} s`);
+  r.info(`pausa di 120 s: eventi in pausa ${pa.eventiInPausa}, nei primi 10 s dopo la ripresa ${pa.eventiNeiPrimi10sDopoLaRipresa}, primo dopo ${pa.primoDopoRipresa} s, distanza minima ${pa.distanzaMinimaDopoRipresa} s`);
   r.check(pa.eventiInPausa === 0 && pa.livelloInPausa < -100, `in pausa nessun tuono suona (livello ${pa.livelloInPausa} dB)`);
-  r.check(pa.eventiNeiPrimi10sDopoLaRipresa <= 1, "alla ripresa nessun tuono arretrato riprodotto in gruppo");
+  // un recupero degli arretrati porterebbe circa 8 tuoni insieme (120 s di pausa con media 14 s);
+  // il ritmo normale ne consente al massimo 2 in 10 s, distanziati di almeno 6 s
+  r.check(pa.eventiNeiPrimi10sDopoLaRipresa <= 2 && pa.distanzaMinimaDopoRipresa >= 6 && pa.primoDopoRipresa >= 2,
+    "alla ripresa nessun tuono arretrato riprodotto in gruppo: ritmo normale, distanza minima rispettata");
 
   const t = await run("tardivo");
   r.check(t.sorgentiAvviate === 0 && t.livello < -100, `ambiente abbandonato durante la preparazione: il caricamento tardivo non lo riattiva (${t.sorgentiAvviate} sorgenti)`);

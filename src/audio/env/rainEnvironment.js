@@ -19,7 +19,7 @@ const THUNDER_HORIZON_S = 90;
 const GUST_HORIZON_S = 60;
 
 // guadagno massimo di ogni componente a livello 100 (calibrato con le misure, vedi report)
-export const RAIN_GAIN = { rain: 0.69, thunder: 0.85, wind: 2.2 };
+export const RAIN_GAIN = { rain: 0.95, thunder: 0.85, wind: 2.2 };
 
 // ── intensità della pioggia: ancore Leggera, Moderata, Intensa, Battente ─────
 // ogni riga dà il valore del parametro alle quattro ancore; in mezzo si interpola
@@ -28,9 +28,9 @@ export const RAIN_CURVES = {
   mid: [0.0, 0.65, 0.85, 0.55], // gocce fitte
   heavy: [0.0, 0.0, 0.55, 1.0], // scroscio
   bed: [0.06, 0.18, 0.4, 0.65], // fondo d'acqua continuo
-  bedLow: [3200, 4800, 6500, 8500], // taglio alto del fondo (Hz): più chiaro con più pioggia
-  bedHigh: [1600, 1100, 650, 320], // taglio basso del fondo (Hz): più corpo con più pioggia
-  body: [0.0, 0.0, 0.12, 0.32], // rombo grave dell'acquazzone
+  bedLow: [6500, 6500, 6000, 5200], // taglio alto del fondo (Hz): l'acquazzone è più pieno e meno sibilante
+  bedHigh: [1800, 1200, 600, 250], // taglio basso del fondo (Hz): più corpo con più pioggia
+  body: [0.0, 0.05, 0.3, 0.6], // rombo grave dell'acquazzone
   comp: [1.0, 1.0, 0.93, 0.82], // compensazione di loudness (misurata: senza, la battente era 2,1 dB sopra la leggera)
 };
 
@@ -52,6 +52,7 @@ function cached(ctx) {
     };
     sourceCache.set(ctx, {
       white: () => get("white", src.white),
+      windNoise: () => get("windNoise", src.windNoise),
       drops: (l) => get("drops-" + l, () => src.drops(l)),
       thunder: () => get("thunder", () => Promise.all([
         ...Array.from({ length: THUNDER_VARIANTS }, (_, v) => src.rumble(v)),
@@ -124,13 +125,12 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
   wait(Promise.all([sources.white(), sources.drops("light"), sources.drops("mid"), sources.drops("heavy")]))
     .then(([white, light, mid, heavy]) => {
       if (disposed) return;
-      loop(white, bedHigh);
-      loop(white, bodyFilter, 0.93);
-      // ogni strato da due sorgenti a velocità appena diverse: la trama non si ripete mai uguale
-      for (const [l, buf] of [["light", light], ["mid", mid], ["heavy", heavy]]) {
-        loop(buf, layerGain[l], 1);
-        loop(buf, layerGain[l], 0.971);
-      }
+      // fondo e corpo grave dalla stessa sorgente, filtrata in due modi (nessun ritardo tra le copie)
+      const bed = loop(white, bedHigh);
+      bed.connect(bodyFilter);
+      // una sorgente per strato: due copie dello stesso strato a velocità diverse
+      // creavano un effetto "flanger", cioè un timbro metallico
+      for (const [l, buf] of [["light", light], ["mid", mid], ["heavy", heavy]]) loop(buf, layerGain[l]);
       report("rain", "ready");
     })
     .catch(() => report("rain", "error"));
@@ -244,7 +244,7 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     const howl = ctx.createGain();
     bp.connect(base).connect(gust);
     howlBp.connect(howl).connect(gust);
-    const src = loop(white, bp, 0.9);
+    const src = loop(white, bp);
     src.connect(howlBp);
     // turbolenza: due oscillazioni lente e non multiple tra loro sul volume del soffio
     const lfoDepth = ctx.createGain();
@@ -276,9 +276,9 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
   function enableWind() {
     const c = config.components.wind;
     if (wind) { set(windLevel.gain, level(c.level, RAIN_GAIN.wind), ctx.currentTime, FADE_S / 3); return; }
-    wait(sources.white()).then((white) => {
+    wait(sources.windNoise()).then((noise) => {
       if (disposed || wind || !config.components.wind.on) return;
-      wind = buildWind(white);
+      wind = buildWind(noise);
       applyWindShape(ctx.currentTime);
       set(windLevel.gain, level(config.components.wind.level, RAIN_GAIN.wind), ctx.currentTime, FADE_S / 3);
       restartGusts();
