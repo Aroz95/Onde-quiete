@@ -127,23 +127,37 @@ function dropFill(layer) {
 }
 
 // ── tuoni ────────────────────────────────────────────────────────────────
+// Un tuono vero: un colpo principale, poi una serie irregolare di rimbombi che "rotolano",
+// con un tremolio rapido e disordinato (il brontolio). L'energia sta soprattutto tra 50 e 300 Hz,
+// con una "voce" più ruvida fino a ~800 Hz. La versione precedente aveva quasi tutta l'energia
+// sotto i 60 Hz: telefoni e auricolari non la riproducono, e il tuono sembrava senza bassi.
+
+// filtro passa-banda a variabili di stato (stabile alle basse frequenze)
+function bandpass(hz, q, sr) {
+  const f = 2 * Math.sin((Math.PI * hz) / sr);
+  let low = 0, band = 0;
+  return (x) => { low += f * band; const high = x - low - band / q; band += f * high; return band; };
+}
+
 function* rumbleFill(out, sr, rng) {
   const n = out.length;
-  // più scoppi in successione, ognuno con attacco e coda: il tuono "rotola"
-  const bursts = [];
-  let t = 0;
-  const count = 2 + Math.floor(rng() * 3);
+  const bursts = [{ at: 0, amp: 1, attack: 0.04 + 0.08 * rng(), tau: 0.9 + 0.9 * rng() }];
+  let t = 0.25 + 0.5 * rng();
+  const count = 3 + Math.floor(rng() * 4);
   for (let k = 0; k < count; k++) {
-    bursts.push({ at: t, amp: k === 0 ? 1 : 0.35 + 0.5 * rng(), attack: 0.08 + 0.4 * rng(), tau: 1.2 + 2.5 * rng() });
-    t += 0.5 + 2.2 * rng();
+    bursts.push({ at: t, amp: (0.35 + 0.55 * rng()) * (1 - 0.08 * k), attack: 0.08 + 0.35 * rng(), tau: 0.7 + 1.8 * rng() });
+    t += 0.4 + 1.6 * rng();
   }
-  let a1 = 0, a2 = 0, b1 = 0;
+  const deep = bandpass(62 + 20 * rng(), 0.8, sr); // il fondo del rombo
+  const body = bandpass(140 + 50 * rng(), 0.9, sr); // il corpo, che si sente anche su un telefono
+  const growl = bandpass(380 + 160 * rng(), 0.8, sr); // la voce ruvida del brontolio
+  // tremolio disordinato: un valore casuale che cambia 3–14 volte al secondo, smussato
+  let rattle = 0.5, target = 0.5, nextChange = 0;
+  const smooth = 1 - Math.exp(-1 / (sr * 0.025));
   for (let i = 0; i < n; i++) {
     if ((i & (YIELD_EVERY - 1)) === 0) yield;
-    const w = rng() * 2 - 1;
-    a1 += 0.05 * (w - a1);
-    a2 += 0.05 * (a1 - a2); // molto grave
-    b1 += 0.18 * (w - b1); // un po' di medi, la "voce" del tuono
+    if (i >= nextChange) { target = rng(); nextChange = i + Math.floor(sr / (3 + 11 * rng())); }
+    rattle += smooth * (target - rattle);
     const x = i / sr;
     let env = 0;
     for (const b of bursts) {
@@ -151,24 +165,31 @@ function* rumbleFill(out, sr, rng) {
       if (dx < 0) continue;
       env += b.amp * Math.min(1, dx / b.attack) * Math.exp(-dx / b.tau);
     }
-    const roll = 0.7 + 0.3 * Math.sin(2 * Math.PI * x * (0.6 + 0.4 * bursts.length / 4));
+    env += 0.22 * Math.min(1, x / 0.6) * Math.exp(-x / 5); // coda lunga che si allontana
+    const w = rng() * 2 - 1;
     const tailFade = Math.min(1, (n - i) / (sr * 0.6));
-    out[i] = (a2 * 14 + b1 * 1.6) * env * roll * tailFade;
+    const v = deep(w) * 1.1 * (0.8 + 0.2 * rattle) + body(w) * 1.0 * (0.55 + 0.45 * rattle) + growl(w) * 0.55 * (0.3 + 0.7 * rattle);
+    out[i] = v * env * tailFade;
   }
 }
 
-// schiocco del fulmine vicino: attacco istantaneo, coda breve e un secondo colpo ravvicinato
+// schiocco del fulmine vicino: una lacerazione di piccoli crepitii, poi il colpo secco
 function* crackFill(out, sr, rng) {
-  const tau = 0.04 + 0.05 * rng();
-  const second = 0.03 + 0.06 * rng();
+  const tear = 0.12 + 0.35 * rng(); // durata della lacerazione prima del colpo
+  const ticks = [];
+  for (let k = 0, at = 0; k < 6 + Math.floor(rng() * 8); k++) { ticks.push({ at, amp: 0.25 + 0.5 * rng() * (at / tear) }); at += (tear / 8) * (0.4 + 1.2 * rng()); }
+  const tau = 0.05 + 0.06 * rng();
   let hp = 0;
   for (let i = 0; i < out.length; i++) {
     if ((i & (YIELD_EVERY - 1)) === 0) yield;
     const x = i / sr;
     const w = rng() * 2 - 1;
-    hp += 0.2 * (w - hp);
-    const env = Math.min(1, x / 0.002) * Math.exp(-x / tau) + (x > second ? 0.5 * Math.exp(-(x - second) / 0.08) : 0);
-    out[i] = (w - hp * 0.5) * env;
+    hp += 0.15 * (w - hp);
+    let env = 0;
+    for (const tk of ticks) { const dx = x - tk.at; if (dx >= 0 && dx < 0.05) env += tk.amp * Math.exp(-dx / 0.006); }
+    const dx = x - tear;
+    if (dx >= 0) env += Math.min(1, dx / 0.002) * Math.exp(-dx / tau) + 0.4 * Math.exp(-dx / 0.25);
+    out[i] = (w - hp * 0.6) * env;
   }
 }
 
@@ -198,6 +219,6 @@ export function rainSources(ctx) {
     // strati di lunghezza diversa (12, 10, 8 s): insieme si ripetono solo ogni 2 minuti
     drops: (layer) => runAsync(stereoLoop(ctx, DROP_LAYERS[layer].seconds, dropFill(layer), { light: 21, mid: 22, heavy: 23 }[layer], { rmsTarget: 0.12 })),
     rumble: (v) => runAsync(monoBuffer(ctx, 13 + (v % 2) * 4, 22050, rumbleFill, 100 + v)),
-    crack: (v) => runAsync(monoBuffer(ctx, 0.7, ctx.sampleRate, crackFill, 200 + v)),
+    crack: (v) => runAsync(monoBuffer(ctx, 1.4, ctx.sampleRate, crackFill, 200 + v)),
   };
 }

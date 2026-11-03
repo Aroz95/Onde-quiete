@@ -106,6 +106,34 @@ window.prove = {
       primoDopoRipresa: +(after[0] - 150).toFixed(1), distanzaMinimaDopoRipresa: +minSpacing.toFixed(1) };
   },
 
+  // tuono violento vicinissimo: la pioggia si abbassa durante il colpo e poi torna al suo livello
+  // La pioggia si ricava per differenza: stessa scena (stesso seme) resa con e senza pioggia;
+  // tuono e pioggia si sommano, quindi la differenza è la sola pioggia, attenuazione compresa.
+  async attenuazione() {
+    let cfg = setParam("rain", defaultConfig("rain"), "thunder", "on", true);
+    for (const [k, v] of [["frequency", 0], ["distance", 100], ["power", 100], ["level", 100]]) cfg = setParam("rain", cfg, "thunder", k, v);
+    const render = async (c) => {
+      const counter = countThunder();
+      const { ctx, env } = await prepare(50, c, 8);
+      env.setActive(true); env.topUp();
+      // i tuoni si preparano a parte: si attende che il primo sia programmato
+      for (let k = 0; k < 200 && !counter.starts.length; k++) await new Promise((r) => setTimeout(r, 25));
+      const first = Math.min(...counter.starts);
+      const out = await ctx.startRendering();
+      counter.restore();
+      return { out, first };
+    };
+    const res = {};
+    for (const [name, c] of [["forte", cfg], ["muto", setParam("rain", cfg, "thunder", "level", 0)]]) {
+      const mix = await render(c), dry = await render(setParam("rain", c, "rain", "level", 0));
+      const a = mix.out.getChannelData(0), b = dry.out.getChannelData(0);
+      const lv = (from, to) => { let q = 0, n = 0; for (let i = Math.floor(from * SR); i < Math.floor(to * SR); i++) { const x = a[i] - b[i]; q += x * x; n++; } return +db(Math.sqrt(q / n)).toFixed(1); };
+      const f = mix.first;
+      res[name] = { primo: +f.toFixed(1), prima: lv(1, Math.min(1.9, f)), durante: lv(f + 1, f + 4), dopo: lv(42, 49) };
+    }
+    return res;
+  },
+
   // ambiente abbandonato mentre si prepara: il caricamento tardivo non lo riattiva
   async tardivo() {
     const ctx = new OfflineAudioContext(2, SR * 10, SR);

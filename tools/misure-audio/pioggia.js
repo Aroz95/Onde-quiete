@@ -9,13 +9,18 @@ const SR = 48000;
 const db = (x) => (x > 0 ? 20 * Math.log10(x) : -Infinity);
 
 // rende un ambiente offline; `kWeight` aggiunge la pesatura K per la loudness
-async function render(config, seconds, { kWeight = false, viaGraph = false, volume = 1, seed = 5 } = {}) {
+async function render(config, seconds, { kWeight = false, viaGraph = false, volume = 1, seed = 5, phone = false } = {}) {
   const ctx = new OfflineAudioContext(2, SR * seconds, SR);
   let dest = ctx.destination;
+  if (phone) {
+    const h1 = ctx.createBiquadFilter(); h1.type = "highpass"; h1.frequency.value = 150;
+    const h2 = ctx.createBiquadFilter(); h2.type = "highpass"; h2.frequency.value = 150;
+    h1.connect(h2).connect(dest); dest = h1;
+  }
   if (kWeight) {
     const shelf = ctx.createBiquadFilter(); shelf.type = "highshelf"; shelf.frequency.value = 1681; shelf.gain.value = 4;
     const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 38; hp.Q.value = 0.5;
-    shelf.connect(hp).connect(ctx.destination);
+    shelf.connect(hp).connect(dest);
     dest = shelf;
   }
   let graph = null;
@@ -129,6 +134,35 @@ function spectrum(out, fromS = 2) {
   return { centroideHz: Math.round(fw / all), acutiDb: +(10 * Math.log10(hi / all)).toFixed(1) };
 }
 
+// energia per bande (dB rispetto al totale). Sotto i 60 Hz la gran parte dei telefoni e degli
+// auricolari non riproduce nulla: un tuono "con i bassi" deve averne tra 60 e 250 Hz
+function bands(out, fromS = 0, toS = Infinity) {
+  const d = out.getChannelData(0), N = 8192, edges = [0, 60, 250, 1000, 24000];
+  const e = [0, 0, 0, 0]; let all = 0;
+  for (let st = Math.floor(SR * fromS); st + N < Math.min(d.length, SR * toS); st += N / 2) {
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = d[st + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+    fft(re, im);
+    for (let k = 1; k < N / 2; k++) { const f = (k * SR) / N, x = re[k] * re[k] + im[k] * im[k]; all += x; for (let b = 0; b < 4; b++) if (f >= edges[b] && f < edges[b + 1]) e[b] += x; }
+  }
+  const r = (x) => +(10 * Math.log10(x / all)).toFixed(1);
+  return { sotto60: r(e[0]), da60a250: r(e[1]), da250a1k: r(e[2]), sopra1k: r(e[3]) };
+}
+
+window.tuonoForte = async () => {
+  const res = {};
+  for (const [name, dist, power] of [["violento vicinissimo", 100, 100], ["violento medio", 50, 100], ["moderato lontano", 25, 40]]) {
+    let c = setParam("rain", rainOnly(20), "thunder", "on", true);
+    for (const [k, v] of [["frequency", 0], ["distance", dist], ["power", power]]) c = setParam("rain", c, "thunder", k, v);
+    c = setParam("rain", c, "rain", "level", 0);
+    const { out } = await render(c, 30);
+    const L = out.getChannelData(0); let first = 0; while (first < L.length && Math.abs(L[first]) < 1e-3) first++;
+    const t = first / SR;
+    res[name] = { ...bands(out, t, t + 8), ...stats(out, t) };
+  }
+  return res;
+};
+
 // corpo grave: quota di energia sotto i 500 Hz rispetto al totale (dB)
 function bodyShare(out, fromS = 2) {
   const d = out.getChannelData(0), N = 8192;
@@ -199,12 +233,17 @@ window.potenza = async () => {
   for (const power of [40, 75, 100]) {
     let c = applyQuick("rain", defaultConfig("rain"), "storm");
     for (const [cid, k, v] of [["thunder", "power", power], ["thunder", "distance", 75], ["thunder", "frequency", 45], ["wind", "on", false]]) c = setParam("rain", c, cid, k, v);
-    const { out } = await render(c, 40, { viaGraph: true, volume: 0.7 });
-    const L = out.getChannelData(0), lv = [];
-    for (let i = SR * 2; i + SR / 2 <= L.length; i += SR / 4) { let q = 0; for (let j = i; j < i + SR / 2; j++) q += L[j] * L[j]; lv.push(db(Math.sqrt(q / (SR / 2)))); }
-    const sorted = [...lv].sort((a, b) => a - b);
-    const st = stats(out);
-    res["potenza " + power] = { sopraLaPioggiaDb: +(sorted[sorted.length - 1] - sorted[Math.floor(sorted.length * 0.3)]).toFixed(1), piccoDb: st.peakDb, saturati: st.clipped };
+    const row = {};
+    // "orecchio": pesatura K; "telefono": in più si toglie ciò che sta sotto i 150 Hz,
+    // che l'altoparlante di un telefono non riproduce
+    for (const [name, phone] of [["orecchioDb", false], ["telefonoDb", true]]) {
+      const { out } = await render(c, 40, { viaGraph: true, volume: 0.7, kWeight: true, phone });
+      const L = out.getChannelData(0), lv = [];
+      for (let i = SR * 2; i + SR / 2 <= L.length; i += SR / 4) { let q = 0; for (let j = i; j < i + SR / 2; j++) q += L[j] * L[j]; lv.push(db(Math.sqrt(q / (SR / 2)))); }
+      const sorted = [...lv].sort((a, b) => a - b);
+      row[name] = +(sorted[sorted.length - 1] - sorted[Math.floor(sorted.length * 0.3)]).toFixed(1);
+    }
+    res["potenza " + power] = row;
   }
   return res;
 };

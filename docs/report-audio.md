@@ -157,30 +157,54 @@ vicinanza in 5 passi (Lontanissimi → Vicinissimi), nuova **potenza** in 4 pass
 distinta dal livello: cambia durata, rombo grave e schiocco. I tuoni violenti aggiungono un secondo
 rotolio sovrapposto. Al massimo 3 tuoni sovrapposti, distanziati di almeno 4 s.
 
-| Tuono (livello 70%) | Picco | Baricentro | Durata |
-|---|---|---|---|
-| Lontanissimi | −20,0 dB | 63 Hz | 10,0 s |
-| Lontani | −15,8 | 92 | 8,9 |
-| Medi | −13,2 | 149 | 8,9 |
-| Vicini | −11,1 | 363 | 8,1 |
-| Vicinissimi | −9,4 | 727 | 7,6 |
-| Medi deboli | −19,3 | 256 | 4,6 |
-| Medi violenti | −4,0 | 69 | 12,7 |
-| Vicinissimi violenti | −1,4 | 203 | 11,5 |
+(La tabella aggiornata dei tuoni isolati è qui sotto, dopo la ricostruzione.)
 
-Su richiesta i tuoni più potenti sono stati resi molto più forti (la curva della potenza sale
-ripida sopra "Forti"). Nel mix completo dell'app, con pioggia intensa al volume del 70%, il secondo
-più forte di un tuono supera il livello tipico della pioggia di:
+#### Tuoni ricostruiti (terzo ascolto: "si sentono poco i bassi")
 
-| Potenza | Prima | Dopo | Picco | Campioni saturati |
+Diagnosi misurata: circa due terzi dell'energia di un tuono violento stava **sotto i 60 Hz**,
+dove telefoni e auricolari non riproducono nulla. Quel sottobasso inudibile in più faceva lavorare
+il limitatore, che abbassava tutto il mix. Sull'altoparlante di un telefono il tuono violento superava
+la pioggia di appena 1,9 dB.
+
+Il tuono ora è fatto così:
+- **Colpo e rimbombi:** un colpo principale, poi 3–6 rimbombi irregolari, con un tremolio disordinato (il brontolio).
+- **Bande di frequenza:** energia a 60–80 Hz (fondo), 140–190 Hz (corpo) e 380–540 Hz (voce ruvida). Sotto i 32 Hz si taglia.
+- **Saturazione morbida:** cresce con potenza e vicinanza. Aggiunge armoniche al rombo, così il basso si percepisce anche su altoparlanti piccoli.
+- **Schiocco dei vicini:** è una lacerazione di piccoli crepitii seguita dal colpo secco.
+- **Pioggia e vento:** durante un tuono potente si abbassano di qualche dB, fino a −8 dB per un violento vicinissimo a livello pieno, poi tornano al loro livello. Con i tuoni a livello zero non succede nulla.
+
+| Tuono violento vicinissimo | Sotto 60 Hz | 60–250 Hz | 250 Hz–1 kHz | Sopra 1 kHz |
 |---|---|---|---|---|
-| Moderati (40) | 1,1 dB | 1,6 dB | −5,0 dBFS | 0 |
-| Forti (75) | 2,9 dB | 8,0 dB | −0,9 dBFS | 0 |
-| Violenti (100) | 5,2 dB | 11,4 dB | −0,5 dBFS | 0 |
+| Prima | −1,7 dB | −5,1 | −19,4 | −23,7 |
+| Dopo | −12,9 dB | −2,9 | −5,9 | −7,6 |
 
-Il limitatore tiene i picchi sotto 0 dBFS: durante un tuono violento abbassa brevemente
-il resto del mix, come succede all'orecchio con un tuono vero. La tabella sopra (tuoni isolati) è
-precedente a questo aumento.
+Quanto il tuono (vicinanza 75%) supera la pioggia intensa nel mix completo, volume 70%:
+
+| Potenza | Prima, orecchio | Prima, telefono | Dopo, orecchio | Dopo, telefono |
+|---|---|---|---|---|
+| Moderati (40) | 0,8 dB | 0,6 dB | 3,2 dB | 3,6 dB |
+| Forti (75) | 5,3 | 2,0 | 7,6 | 8,1 |
+| Violenti (100) | 8,3 | 1,9 | 11,0 | 11,0 |
+
+"Orecchio" usa la pesatura K. "Telefono" toglie in più tutto ciò che sta sotto i 150 Hz.
+
+Tuoni isolati, livello 70%, misurati dall'arrivo:
+
+| Tuono | Picco | Baricentro | Durata |
+|---|---|---|---|
+| Lontanissimi | −15,2 dB | 113 Hz | 10,1 s |
+| Lontani | −9,9 | 263 | 9,4 |
+| Medi | −6,7 | 455 | 8,7 |
+| Vicini | −3,7 | 694 | 8,2 |
+| Vicinissimi | +0,6 | 932 | 7,8 |
+| Medi deboli | −11,7 | 540 | 4,8 |
+| Medi violenti | +0,7 | 319 | 14,6 |
+| Vicinissimi violenti | +10,3 | 662 | 13,5 |
+
+I picchi sopra 0 dB riguardano il tuono da solo, prima del limitatore. Nell'app, il caso peggiore
+(tutto al massimo, volume 100%) resta a −0,5 dBFS senza campioni saturati.
+L'arrotondamento di sicurezza ora lavora senza sovracampionamento: con i tuoni violenti il filtro di
+ricampionamento superava il massimo di 0,2 dB.
 
 In 4 minuti: 1 tuono con "Rarissimi", 35 con "Continui". I dati salvati prima di questa versione
 ricevono la potenza predefinita (Moderati) e conservano gli altri valori.
@@ -198,7 +222,7 @@ Prima della calibrazione il vento era 24 dB sotto la pioggia e quasi impercettib
 
 Temporale con tutto al 100% (pioggia battente, tuoni vicini e frequenti, burrasca, raffiche frequenti),
 volume generale 100%, ora con tuoni continui, vicinissimi e violenti: picco −0,5 dBFS, **nessun campione saturato**,
-picco −0,4 dBFS dopo l'aumento dei tuoni violenti; picco/medio 12,5 dB (dinamica conservata), 22 sorgenti attive (tuoni sovrapposti con doppio rotolio).
+picco −0,5 dBFS dopo la ricostruzione dei tuoni; picco/medio 11 dB circa (dinamica conservata), 22 sorgenti attive (tuoni sovrapposti con doppio rotolio).
 Prima della correzione: +0,4 dBFS con 7 campioni saturati. Correzioni: raffiche di burrasca meno estreme
 e arrotondamento morbido di sicurezza sopra l'80% della scala, dopo il limitatore.
 

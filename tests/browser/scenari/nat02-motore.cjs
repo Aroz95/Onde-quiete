@@ -19,6 +19,12 @@ module.exports = async function (browser, r) {
   r.check(s.nuoviEventiDopo === 0 && s.livelloDopo < -80, "dopo lo spegnimento non arrivano nuovi tuoni");
 
   const pa = await run("pausa");
+  const at = await run("attenuazione");
+  const { forte: f2, muto } = at;
+  r.info(`pioggia con un tuono violento vicinissimo: ${f2.prima} → ${f2.durante} → ${f2.dopo} dB; con tuoni a livello zero: ${muto.prima} → ${muto.durante} dB`);
+  r.check(f2.durante < f2.prima - 4 && Math.abs(f2.dopo - f2.prima) < 1.5, "durante un tuono violento la pioggia si abbassa, poi torna al suo livello");
+  r.check(Math.abs(muto.durante - muto.prima) < 1, "con i tuoni a livello zero la pioggia non si abbassa");
+
   r.info(`pausa di 120 s: eventi in pausa ${pa.eventiInPausa}, nei primi 10 s dopo la ripresa ${pa.eventiNeiPrimi10sDopoLaRipresa}, primo dopo ${pa.primoDopoRipresa} s, distanza minima ${pa.distanzaMinimaDopoRipresa} s`);
   r.check(pa.eventiInPausa === 0 && pa.livelloInPausa < -100, `in pausa nessun tuono suona (livello ${pa.livelloInPausa} dB)`);
   // un recupero degli arretrati porterebbe circa 17 tuoni insieme (120 s di pausa con media 7 s);

@@ -35,7 +35,9 @@ export function createGraph(ctx, destination) {
   // nessun campione può superare il massimo, la dinamica normale non viene toccata
   const clipper = ctx.createWaveShaper();
   clipper.curve = SAFETY_CURVE;
-  clipper.oversample = "2x";
+  // senza sovracampionamento: il filtro di ricampionamento oscilla e può superare il massimo
+  // di qualche decimo di dB (misurato con i tuoni violenti); la curva è morbida, l'aliasing trascurabile
+  clipper.oversample = "none";
   master.connect(limiter).connect(clipper).connect(destination);
 
   const envBus = ctx.createGain();

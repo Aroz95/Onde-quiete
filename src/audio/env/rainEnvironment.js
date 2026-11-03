@@ -19,7 +19,7 @@ const THUNDER_HORIZON_S = 90;
 const GUST_HORIZON_S = 60;
 
 // guadagno massimo di ogni componente a livello 100 (calibrato con le misure, vedi report)
-export const RAIN_GAIN = { rain: 1.05, thunder: 1.0, wind: 2.2 };
+export const RAIN_GAIN = { rain: 1.05, thunder: 2.3, wind: 2.2 };
 
 // ── intensità della pioggia: ancore Leggera, Moderata, Intensa, Battente ─────
 // ogni riga dà il valore del parametro alle quattro ancore; in mezzo si interpola
@@ -41,6 +41,14 @@ export function interpolate(curve, x) {
 }
 
 // le sorgenti si generano una volta per contesto audio e si riusano tra un ambiente e l'altro
+// curva di saturazione dei tuoni: tanh(3x) normalizzata; pendenza all'origine ≈ 3,01
+const THUNDER_CURVE = (() => {
+  const n = 2048, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) c[i] = Math.tanh(3 * ((i / (n - 1)) * 2 - 1)) / Math.tanh(3);
+  return c;
+})();
+const THUNDER_SLOPE = 3 / Math.tanh(3);
+
 const sourceCache = new WeakMap();
 function cached(ctx) {
   if (!sourceCache.has(ctx)) {
@@ -86,7 +94,11 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
   // ── pioggia ────────────────────────────────────────────────────────────
   const rainLevel = ctx.createGain();
   rainLevel.gain.value = 0;
-  rainLevel.connect(output);
+  // pioggia e vento passano da qui: durante un tuono potente si abbassano un poco,
+  // come fa l'orecchio davanti a un tuono vero (e il tuono ha più spazio sotto il limitatore)
+  const duck = ctx.createGain();
+  duck.connect(output);
+  rainLevel.connect(duck);
   const shape = ctx.createGain(); // compensazione di loudness dell'intensità
   shape.connect(rainLevel);
   const bedHigh = ctx.createBiquadFilter(); bedHigh.type = "highpass"; bedHigh.Q.value = 0.5;
@@ -169,16 +181,32 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     const pick = () => thunderBuffers.rumbles[Math.floor(rng() * thunderBuffers.rumbles.length)];
     const rumble = track(ctx.createBufferSource());
     rumble.buffer = pick();
-    rumble.playbackRate.value = 0.72 + 0.4 * d - 0.08 * pw;
+    rumble.playbackRate.value = 0.85 + 0.25 * d - 0.05 * pw;
+    // sotto i 32 Hz solo energia che telefoni e auricolari non riproducono e che fa lavorare il limitatore
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 32;
+    hp.Q.value = 0.7;
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.frequency.value = 150 + 3500 * d ** 1.6; // anche i lontanissimi restano udibili su un telefono
     lp.Q.value = 0.6;
-    // potenza: più rombo grave (fino a +9 dB sotto i 120 Hz) e coda più lunga
+    // potenza: più corpo attorno ai 100 Hz, la zona del "boom" che si sente davvero
     const shelf = ctx.createBiquadFilter();
-    shelf.type = "lowshelf";
-    shelf.frequency.value = 120;
-    shelf.gain.value = -4 + 13 * pw + 4 * pw ** 3;
+    shelf.type = "peaking";
+    shelf.frequency.value = 100;
+    shelf.Q.value = 0.8;
+    shelf.gain.value = -3 + 10 * pw;
+    // saturazione morbida: aggiunge armoniche al rombo, così il basso si percepisce anche dove
+    // l'altoparlante non arriva (un tuono forte vero "gratta"); quasi assente nei tuoni deboli e lontani
+    const sat = 0.15 + 0.85 * pw ** 2 * (0.4 + 0.6 * d);
+    const drive = ctx.createGain();
+    drive.gain.value = sat;
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = THUNDER_CURVE;
+    shaper.oversample = "2x";
+    const makeup = ctx.createGain();
+    makeup.gain.value = 1 / (THUNDER_SLOPE * sat);
     const g = ctx.createGain();
     // la potenza cresce piano fino a "Forti" e poi molto: i violenti dominano la scena
     const boost = 0.5 + 0.55 * pw + 2.4 * pw ** 3;
@@ -189,12 +217,13 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     g.gain.setValueAtTime(0, ev.start);
     g.gain.linearRampToValueAtTime(amp, ev.start + attack);
     g.gain.setTargetAtTime(0, ev.start + attack + hold, tau);
-    rumble.connect(lp).connect(shelf).connect(g).connect(pan);
+    rumble.connect(hp).connect(lp).connect(shelf).connect(drive).connect(shaper).connect(makeup).connect(g).connect(pan);
     rumble.start(ev.start);
     const fadeEnd = ev.start + attack + hold + 5 * tau;
     ev.end = Math.min(ev.start + rumble.buffer.duration / rumble.playbackRate.value, fadeEnd);
     rumble.stop(ev.end + 0.05);
-    nodes.push(rumble, lp, shelf, g);
+    nodes.push(rumble, hp, lp, shelf, drive, shaper, makeup, g);
+    duckFor(ev.start, attack, hold, d, pw);
     // tuoni forti: un secondo rotolio sovrapposto, poco dopo il primo
     if (pw > 0.5) {
       const roll = track(ctx.createBufferSource());
@@ -204,7 +233,7 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
       const rg = ctx.createGain();
       rg.gain.value = ((pw - 0.5) / 0.5) * 0.55;
       const at = ev.start + 0.4 + 1.4 * rng();
-      roll.connect(rg).connect(lp);
+      roll.connect(rg).connect(hp);
       roll.start(at);
       roll.stop(ev.end);
       nodes.push(roll, rg);
@@ -227,10 +256,20 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     thunderEvents.set(ev, { gain: g, sources: nodes.filter((n) => n instanceof AudioScheduledSourceNode) });
   }
 
+  function duckFor(start, attack, hold, d, pw) {
+    // fino a −8 dB per un tuono violento vicinissimo a livello pieno; nulla se i tuoni sono muti
+    const depth = 0.6 * pw ** 2 * (0.3 + 0.7 * d) * (config.components.thunder.level / 100);
+    if (depth < 0.08) return;
+    duck.gain.setTargetAtTime(1 - depth, start + Math.max(0, attack - 0.05), 0.06);
+    duck.gain.setTargetAtTime(1, start + attack + hold * 0.6, 1.4);
+  }
+
   // annulla i tuoni non ancora iniziati; quelli in corso sfumano se `fadeCurrent`
   function stopThunder(fadeCurrent) {
     const now = ctx.currentTime;
     thunderSeq = cancelFuture(thunderSeq, now).state;
+    duck.gain.cancelScheduledValues(now);
+    duck.gain.setTargetAtTime(1, now, 0.3);
     for (const [ev, n] of thunderEvents) {
       if (ev.start > now) {
         n.sources.forEach((s) => { try { s.stop(); } catch { /* */ } });
@@ -261,7 +300,7 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
   // ── vento ──────────────────────────────────────────────────────────────
   const windLevel = ctx.createGain();
   windLevel.gain.value = 0;
-  windLevel.connect(output);
+  windLevel.connect(duck);
   let wind = null; // nodi del vento, creati quando si accende e rilasciati quando si spegne
   let gustSeq = { nextAt: Infinity, events: [] };
 
