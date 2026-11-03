@@ -178,9 +178,11 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     const shelf = ctx.createBiquadFilter();
     shelf.type = "lowshelf";
     shelf.frequency.value = 120;
-    shelf.gain.value = -4 + 13 * pw;
+    shelf.gain.value = -4 + 13 * pw + 4 * pw ** 3;
     const g = ctx.createGain();
-    const amp = (0.4 + 0.6 * d ** 1.2) * (0.5 + 0.55 * pw) * (0.8 + 0.2 * rng());
+    // la potenza cresce piano fino a "Forti" e poi molto: i violenti dominano la scena
+    const boost = 0.5 + 0.55 * pw + 2.4 * pw ** 3;
+    const amp = (0.4 + 0.6 * d ** 1.2) * boost * (0.8 + 0.2 * rng());
     const attack = 0.03 + 2.2 * (1 - d) ** 1.5;
     const hold = 2 + 9 * pw; // quanto resta pieno prima di spegnersi
     const tau = 0.6 + 1.8 * pw;
@@ -212,7 +214,7 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
       const crack = track(ctx.createBufferSource());
       crack.buffer = thunderBuffers.cracks[Math.floor(rng() * thunderBuffers.cracks.length)];
       const cg = ctx.createGain();
-      cg.gain.value = ((d - 0.35) / 0.65) ** 1.3 * (0.45 + 0.65 * pw) * (0.8 + 0.2 * rng());
+      cg.gain.value = ((d - 0.35) / 0.65) ** 1.3 * (0.45 + 0.65 * pw + 1.2 * pw ** 3) * (0.8 + 0.2 * rng());
       // vicinissimi: lo schiocco arriva insieme al lampo; un po' più lontano, con un leggero ritardo
       crack.connect(cg).connect(pan);
       crack.start(ev.start + (1 - d) * 0.25);

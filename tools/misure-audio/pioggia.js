@@ -192,6 +192,23 @@ window.tuoni = async () => {
   return res;
 };
 
+// tuoni dentro il mix completo dell'app (limitatore compreso), pioggia intensa al volume del 70%:
+// quanto il secondo più forte di un tuono supera il livello tipico della pioggia
+window.potenza = async () => {
+  const res = {};
+  for (const power of [40, 75, 100]) {
+    let c = applyQuick("rain", defaultConfig("rain"), "storm");
+    for (const [cid, k, v] of [["thunder", "power", power], ["thunder", "distance", 75], ["thunder", "frequency", 45], ["wind", "on", false]]) c = setParam("rain", c, cid, k, v);
+    const { out } = await render(c, 40, { viaGraph: true, volume: 0.7 });
+    const L = out.getChannelData(0), lv = [];
+    for (let i = SR * 2; i + SR / 2 <= L.length; i += SR / 4) { let q = 0; for (let j = i; j < i + SR / 2; j++) q += L[j] * L[j]; lv.push(db(Math.sqrt(q / (SR / 2)))); }
+    const sorted = [...lv].sort((a, b) => a - b);
+    const st = stats(out);
+    res["potenza " + power] = { sopraLaPioggiaDb: +(sorted[sorted.length - 1] - sorted[Math.floor(sorted.length * 0.3)]).toFixed(1), piccoDb: st.peakDb, saturati: st.clipped };
+  }
+  return res;
+};
+
 window.vento = async () => {
   const res = {};
   for (const [name, s] of [["brezza", 5], ["burrasca", 95]]) {

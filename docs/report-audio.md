@@ -168,6 +168,20 @@ rotolio sovrapposto. Al massimo 3 tuoni sovrapposti, distanziati di almeno 4 s.
 | Medi violenti | −4,0 | 69 | 12,7 |
 | Vicinissimi violenti | −1,4 | 203 | 11,5 |
 
+Su richiesta i tuoni più potenti sono stati resi molto più forti (la curva della potenza sale
+ripida sopra "Forti"). Nel mix completo dell'app, con pioggia intensa al volume del 70%, il secondo
+più forte di un tuono supera il livello tipico della pioggia di:
+
+| Potenza | Prima | Dopo | Picco | Campioni saturati |
+|---|---|---|---|---|
+| Moderati (40) | 1,1 dB | 1,6 dB | −5,0 dBFS | 0 |
+| Forti (75) | 2,9 dB | 8,0 dB | −0,9 dBFS | 0 |
+| Violenti (100) | 5,2 dB | 11,4 dB | −0,5 dBFS | 0 |
+
+Il limitatore tiene i picchi sotto 0 dBFS: durante un tuono violento abbassa brevemente
+il resto del mix, come succede all'orecchio con un tuono vero. La tabella sopra (tuoni isolati) è
+precedente a questo aumento.
+
 In 4 minuti: 1 tuono con "Rarissimi", 35 con "Continui". I dati salvati prima di questa versione
 ricevono la potenza predefinita (Moderati) e conservano gli altri valori.
 
@@ -184,7 +198,7 @@ Prima della calibrazione il vento era 24 dB sotto la pioggia e quasi impercettib
 
 Temporale con tutto al 100% (pioggia battente, tuoni vicini e frequenti, burrasca, raffiche frequenti),
 volume generale 100%, ora con tuoni continui, vicinissimi e violenti: picco −0,5 dBFS, **nessun campione saturato**,
-picco/medio 12,8 dB (dinamica conservata), 22 sorgenti attive (tuoni sovrapposti con doppio rotolio).
+picco −0,4 dBFS dopo l'aumento dei tuoni violenti; picco/medio 12,5 dB (dinamica conservata), 22 sorgenti attive (tuoni sovrapposti con doppio rotolio).
 Prima della correzione: +0,4 dBFS con 7 campioni saturati. Correzioni: raffiche di burrasca meno estreme
 e arrotondamento morbido di sicurezza sopra l'80% della scala, dopo il limitatore.
 

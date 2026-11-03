@@ -30,5 +30,5 @@ e vicini, brezza e burrasca, caso peggiore attraverso il grafo dell'app.
 ```bash
 npx esbuild tools/misure-audio/pioggia.js --bundle --outfile=tools/misure-audio/bundle-pioggia.js
 node tools/misure-audio/pioggia.cjs                     # tutte le misure
-node tools/misure-audio/pioggia.cjs intensita,peggiore  # solo alcune
+node tools/misure-audio/pioggia.cjs intensita,peggiore  # solo alcune (anche: timbro, potenza)
 ```
