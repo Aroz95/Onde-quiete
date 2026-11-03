@@ -114,6 +114,21 @@ function tonalScore(out, fromS = 2) {
   return +(10 * Math.log10(worst)).toFixed(1);
 }
 
+// equilibrio dello spettro: baricentro (Hz) e quota sopra i 6 kHz (dB).
+// La pioggia vera ha il baricentro tra 2 e 5 kHz; impulsi molto acuti suonano come grandine
+function spectrum(out, fromS = 2) {
+  const d = out.getChannelData(0), N = 8192;
+  const cut = Math.floor((6000 / SR) * N);
+  let hi = 0, all = 0, fw = 0, wins = 0;
+  for (let st = SR * fromS; st + N < d.length && wins < 60; st += N / 2, wins++) {
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = d[st + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+    fft(re, im);
+    for (let k = 1; k < N / 2; k++) { const e = re[k] * re[k] + im[k] * im[k]; all += e; fw += e * (k * SR / N); if (k >= cut) hi += e; }
+  }
+  return { centroideHz: Math.round(fw / all), acutiDb: +(10 * Math.log10(hi / all)).toFixed(1) };
+}
+
 // corpo grave: quota di energia sotto i 500 Hz rispetto al totale (dB)
 function bodyShare(out, fromS = 2) {
   const d = out.getChannelData(0), N = 8192;
@@ -133,7 +148,7 @@ window.timbro = async () => {
   for (const x of [0, 33, 66, 100]) {
     const { out } = await render(rainOnly(x), 14);
     const st = stats(out);
-    rows.push({ intensita: x, metallicoPettine: combScore(out), notePiccoDb: tonalScore(out), granularitaDb: st.granularitaDb, corpoGraveDb: bodyShare(out), crestDb: st.crestDb });
+    rows.push({ intensita: x, metallicoPettine: combScore(out), notePiccoDb: tonalScore(out), granularitaDb: st.granularitaDb, corpoGraveDb: bodyShare(out), ...spectrum(out), crestDb: st.crestDb });
   }
   // pioggia e vento insieme: la stessa materia prima a velocità diverse crea il pettine
   let c = setParam("rain", rainOnly(50), "wind", "on", true);
@@ -157,13 +172,22 @@ window.intensita = async () => {
 
 window.tuoni = async () => {
   const res = {};
-  for (const [name, dist] of [["lontani", 10], ["vicini", 90]]) {
+  // vicinanza e potenza ai due estremi e al centro: colore, livello e durata devono cambiare
+  for (const [name, dist, power] of [["lontanissimi", 0, 40], ["lontani", 25, 40], ["medi", 50, 40], ["vicini", 75, 40], ["vicinissimi", 100, 40],
+    ["deboli (medi)", 50, 0], ["violenti (medi)", 50, 100], ["violenti vicinissimi", 100, 100]]) {
     let c = setParam("rain", rainOnly(20), "thunder", "on", true);
-    c = setParam("rain", c, "thunder", "frequency", 100);
+    c = setParam("rain", c, "thunder", "frequency", 30);
     c = setParam("rain", c, "thunder", "distance", dist);
+    c = setParam("rain", c, "thunder", "power", power);
     c = setParam("rain", c, "rain", "level", 0); // solo tuoni
-    const { out } = await render(c, 60);
-    res[name] = stats(out, 1);
+    const { out } = await render(c, 40);
+    // durata del primo tuono: tempo in cui resta sopra −40 dB dal suo picco
+    const L = out.getChannelData(0), win = SR / 10, lv = [];
+    for (let i = 0; i + win <= L.length; i += win) { let s = 0; for (let j = i; j < i + win; j++) s += L[j] * L[j]; lv.push(Math.sqrt(s / win)); }
+    const top = Math.max(...lv); const first = lv.findIndex((x) => x > top * 0.01);
+    let last = first; while (last + 1 < lv.length && lv[last + 1] > top * 0.01) last++;
+    const from = first / 10; // misure dall'arrivo del primo tuono
+    res[name] = { ...stats(out, from), ...spectrum(out, from), durataS: +((last - first) / 10).toFixed(1) };
   }
   return res;
 };

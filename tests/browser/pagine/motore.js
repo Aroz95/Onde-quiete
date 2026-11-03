@@ -26,11 +26,12 @@ function countThunder() {
   const origStart = AudioBufferSourceNode.prototype.start;
   const origStop = AudioBufferSourceNode.prototype.stop;
   AudioBufferSourceNode.prototype.start = function (when = 0, ...a) {
-    if (this.buffer && this.buffer.sampleRate === 22050) { this.__start = when; sources.push(this); }
+    if (this.buffer && this.buffer.sampleRate === 22050 && !this.secondary) { this.__start = when; sources.push(this); }
     return origStart.call(this, when, ...a);
   };
   AudioBufferSourceNode.prototype.stop = function (when, ...a) {
-    if (this.__start !== undefined && this.__stopAt === undefined) this.__stopAt = when || this.context.currentTime;
+    // vale lo stop più vicino: un tuono annullato riceve uno stop immediato dopo quello di fine coda
+    if (this.__start !== undefined) this.__stopAt = Math.min(this.__stopAt ?? Infinity, when || this.context.currentTime);
     return origStop.call(this, when, ...a);
   };
   return {

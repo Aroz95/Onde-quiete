@@ -133,10 +133,11 @@ test di unità in `tests/environments.test.js` e `tests/scheduler.test.js`.
 | Pausa, ripresa e fine timer su tutte le componenti | ✅ | ✅ | ⏳ iPhone |
 | Nessun evento arretrato alla ripresa | ✅ | ✅ dopo 120 s di pausa | — |
 | Mix più impegnativo senza saturazione, interfaccia reattiva | — | ✅ −0,5 dBFS, blocco massimo 61 ms | ⏳ iPhone |
-| **NAT-03** Leggera e battente diverse per carattere a livello simile | — | ✅ granularità 5,6 → 1,4 dB, loudness ±0,3 dB | ⏳ ascolto |
-| Timbro naturale, senza metallico né crepitio (segnalazione all'ascolto) | — | ✅ pettine 0,44 → 0,09; picchi tonali 14,2 → 1,8 dB | ⏳ riascolto |
+| **NAT-03** Leggera e battente diverse per carattere a livello simile | — | ✅ granularità 5,1 → 1,9 dB, loudness ±0,5 dB | ⏳ ascolto |
+| Timbro naturale, senza metallico né crepitio (segnalazione all'ascolto) | — | ✅ pettine 0,44 → 0,09; picchi tonali 14,2 → 1,8 dB | ✅ confermato all'ascolto |
+| Gocce d'acqua, non grandine (secondo ascolto) | — | ✅ brillantezza 9.810 → 3.850 Hz, gocce da 6–40 ms | ⏳ riascolto |
 | Tuoni e vento indipendenti | ✅ | ✅ | — |
-| Frequenza, distanza e livello dei tuoni distinti | ✅ | ✅ 3 → 19 tuoni; 99 → 425 Hz | ⏳ ascolto |
+| Frequenza, vicinanza, potenza e livello dei tuoni distinti (scale ampliate su richiesta) | ✅ | ✅ 1 → 35 tuoni in 4 min; 63 → 727 Hz; 4,6 → 12,7 s | ⏳ ascolto |
 | Burrasca non cambia pioggia né volume generale | ✅ | ✅ | — |
 | Leggera → temporale → leggera senza interrompere il timer | — | ✅ | ⏳ |
 | Configurazione ritrovata riaprendo l'app | — | ✅ | ⏳ |

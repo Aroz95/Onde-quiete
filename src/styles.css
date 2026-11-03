@@ -190,6 +190,8 @@ body {
 .row label { font-size: 0.85rem; color: var(--muted); }
 .row output { font-family: var(--mono); font-size: 0.8rem; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row output.word { font-family: var(--display); font-size: 0.84rem; font-weight: 600; }
+/* parole lunghe ("Lontanissimi"): un po' più strette, così restano nella colonna */
+.row output.word.long { font-size: 0.74rem; letter-spacing: -0.01em; }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .field { display: grid; gap: 8px; }

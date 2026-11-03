@@ -65,15 +65,18 @@ export function cancelFuture(state, now) {
 
 const lerpLog = (a, b, x) => a * (b / a) ** x;
 
-/** Tuoni: `frequency` 0–1 (rari → frequenti). Media da 110 s a 14 s. */
-export function thunderRule(frequency) {
-  const mean = lerpLog(110, 14, frequency);
+/**
+ * Tuoni: `frequency` 0–1 (rarissimi → continui), media da 5 minuti a 7 s.
+ * `power` 0–1 allunga la coda: un tuono violento rotola più a lungo.
+ */
+export function thunderRule(frequency, power = 0.4) {
+  const mean = lerpLog(300, 7, frequency);
   return {
     mean,
     interval: (rng) => mean * (0.4 + 1.2 * rng()),
-    duration: (rng) => 9 + 5 * rng(), // la coda del tuono
-    minGap: 6,
-    maxOverlap: 2,
+    duration: (rng) => 6 + 5 * rng() + 9 * power, // la coda del tuono
+    minGap: 4,
+    maxOverlap: 3,
     // il primo tuono arriva presto, così chi lo attiva lo sente
     firstDelay: (rng) => 2 + rng() * Math.min(10, 0.3 * mean),
   };

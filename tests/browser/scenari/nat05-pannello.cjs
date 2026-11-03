@@ -21,7 +21,7 @@ module.exports = async function (browser, r) {
       r.check(/dialog "Personalizza Pioggia"/.test(await p.locator("body").ariaSnapshot()), "il pannello è letto come finestra 'Personalizza Pioggia'");
       r.check(/switch "Tuoni" \[checked\]/.test(aria) && /switch "Vento" \[checked\]/.test(aria) && /switch "Rumore colorato"/.test(aria),
         "interruttori letti come 'interruttore' con nome e stato");
-      r.check(/slider "Intensità, pioggia"/.test(aria) && /slider "Distanza, tuoni"/.test(aria) && /slider "Forza, vento"/.test(aria),
+      r.check(/slider "Intensità, pioggia"/.test(aria) && /slider "Vicinanza, tuoni"/.test(aria) && /slider "Potenza, tuoni"/.test(aria) && /slider "Forza, vento"/.test(aria),
         "ogni cursore indica componente e fenomeno");
       const vt = await p.$$eval(".sheet input[type=range]", (els) => Object.fromEntries(els.map((e) => [e.id, e.getAttribute("aria-valuetext")])));
       r.check(vt["env-rain-intensity"] === "Battente" && vt["env-thunder-frequency"] === "Occasionali" && /%$/.test(vt["env-rain-level"]),
@@ -36,6 +36,12 @@ module.exports = async function (browser, r) {
       await p.keyboard.press("Space"); await p.waitForTimeout(200);
     }
 
+    // le parole più lunghe delle scale ("Lontanissimi", "Rarissimi") devono stare nella colonna del valore
+    for (const id of ["#env-thunder-distance", "#env-thunder-frequency"]) { await p.focus(id); await p.keyboard.press("Home"); }
+    await p.waitForTimeout(200);
+    const words = await p.$$eval(".row output.word", (els) => els.map((e) => ({ t: e.textContent, over: e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > e.closest(".row").getBoundingClientRect().right + 0.5 })));
+    r.check(words.some((w) => w.t === "Lontanissimi") && words.every((w) => !w.over),
+      `${width}px: i valori a parole stanno nella loro colonna (${words.filter((w) => w.over).map((w) => w.t).join(", ") || "nessuno sborda"})`);
     const layout = await p.evaluate(() => {
       const body = document.querySelector(".sheet-body");
       const fine = document.querySelector(".text-btn.strong").getBoundingClientRect();

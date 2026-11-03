@@ -24,7 +24,7 @@ const SHORT = {
     audible(ENVIRONMENTS.rain.components.rain, c.rain) && w("rain", "intensity"),
     // nella sintesi breve la distanza si precisa solo agli estremi
     audible(ENVIRONMENTS.rain.components.thunder, c.thunder) &&
-      ({ Lontani: "Tuoni lontani", Vicini: "Tuoni vicini" }[w("thunder", "distance")] || "Tuoni"),
+      ({ Lontanissimi: "Tuoni lontani", Lontani: "Tuoni lontani", Vicini: "Tuoni vicini", Vicinissimi: "Tuoni vicini" }[w("thunder", "distance")] || "Tuoni"),
     audible(ENVIRONMENTS.rain.components.wind, c.wind) && (w("wind", "strength") === "Burrasca" ? "Burrasca" : `Vento ${lower(w("wind", "strength"))}`),
   ],
   sea: (c, w) => [
@@ -60,7 +60,7 @@ export function describeEnv(envId, config) {
     if (audible(R.rain, c.rain)) parts.push(`pioggia ${w("rain", "intensity")}`);
     if (audible(R.thunder, c.thunder)) {
       const dist = { medi: "a media distanza" }[w("thunder", "distance")] || w("thunder", "distance");
-      parts.push(`tuoni ${w("thunder", "frequency")} ${dist}`);
+      parts.push(`tuoni ${w("thunder", "power")} ${w("thunder", "frequency")} ${dist}`);
     }
     if (audible(R.wind, c.wind)) parts.push(w("wind", "strength") === "burrasca" ? `burrasca a raffiche ${w("wind", "gusts")}` : `vento ${w("wind", "strength")} a raffiche ${w("wind", "gusts")}`);
   } else {

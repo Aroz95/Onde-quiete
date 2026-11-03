@@ -19,7 +19,7 @@ const THUNDER_HORIZON_S = 90;
 const GUST_HORIZON_S = 60;
 
 // guadagno massimo di ogni componente a livello 100 (calibrato con le misure, vedi report)
-export const RAIN_GAIN = { rain: 0.95, thunder: 0.85, wind: 2.2 };
+export const RAIN_GAIN = { rain: 1.05, thunder: 1.0, wind: 2.2 };
 
 // ── intensità della pioggia: ancore Leggera, Moderata, Intensa, Battente ─────
 // ogni riga dà il valore del parametro alle quattro ancore; in mezzo si interpola
@@ -158,36 +158,64 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
 
   function playThunder(ev) {
     const c = config.components.thunder;
-    const d = c.distance / 100; // 0 lontano, 1 vicino
+    const d = c.distance / 100; // 0 lontanissimo, 1 vicinissimo
+    const pw = (c.power ?? 40) / 100; // 0 debole, 1 violento
     const pan = ctx.createStereoPanner();
-    pan.pan.value = (rng() * 2 - 1) * 0.6;
+    // i tuoni vicini si sentono più "di lato", quelli lontani più diffusi al centro
+    pan.pan.value = (rng() * 2 - 1) * (0.3 + 0.5 * d);
     pan.connect(thunderLevel);
     const nodes = [pan];
     // rimbombo: lontano è più grave, più lento ad arrivare e più ovattato
+    const pick = () => thunderBuffers.rumbles[Math.floor(rng() * thunderBuffers.rumbles.length)];
     const rumble = track(ctx.createBufferSource());
-    rumble.buffer = thunderBuffers.rumbles[Math.floor(rng() * thunderBuffers.rumbles.length)];
-    rumble.playbackRate.value = 0.82 + 0.28 * d;
+    rumble.buffer = pick();
+    rumble.playbackRate.value = 0.72 + 0.4 * d - 0.08 * pw;
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = 160 + 2600 * d ** 1.4;
+    lp.frequency.value = 150 + 3500 * d ** 1.6; // anche i lontanissimi restano udibili su un telefono
     lp.Q.value = 0.6;
+    // potenza: più rombo grave (fino a +9 dB sotto i 120 Hz) e coda più lunga
+    const shelf = ctx.createBiquadFilter();
+    shelf.type = "lowshelf";
+    shelf.frequency.value = 120;
+    shelf.gain.value = -4 + 13 * pw;
     const g = ctx.createGain();
-    const amp = (0.4 + 0.6 * d) * (0.75 + 0.25 * rng());
-    const attack = 0.06 + (1 - d) * 1.4;
+    const amp = (0.4 + 0.6 * d ** 1.2) * (0.5 + 0.55 * pw) * (0.8 + 0.2 * rng());
+    const attack = 0.03 + 2.2 * (1 - d) ** 1.5;
+    const hold = 2 + 9 * pw; // quanto resta pieno prima di spegnersi
+    const tau = 0.6 + 1.8 * pw;
     g.gain.setValueAtTime(0, ev.start);
     g.gain.linearRampToValueAtTime(amp, ev.start + attack);
-    rumble.connect(lp).connect(g).connect(pan);
+    g.gain.setTargetAtTime(0, ev.start + attack + hold, tau);
+    rumble.connect(lp).connect(shelf).connect(g).connect(pan);
     rumble.start(ev.start);
-    ev.end = ev.start + rumble.buffer.duration / rumble.playbackRate.value;
-    nodes.push(rumble, lp, g);
-    // schiocco solo per i fulmini abbastanza vicini, tanto più forte quanto più vicino
-    if (d > 0.4) {
+    const fadeEnd = ev.start + attack + hold + 5 * tau;
+    ev.end = Math.min(ev.start + rumble.buffer.duration / rumble.playbackRate.value, fadeEnd);
+    rumble.stop(ev.end + 0.05);
+    nodes.push(rumble, lp, shelf, g);
+    // tuoni forti: un secondo rotolio sovrapposto, poco dopo il primo
+    if (pw > 0.5) {
+      const roll = track(ctx.createBufferSource());
+      roll.secondary = true; // parte dello stesso tuono (le misure contano un tuono solo)
+      roll.buffer = pick();
+      roll.playbackRate.value = rumble.playbackRate.value * (0.9 + 0.15 * rng());
+      const rg = ctx.createGain();
+      rg.gain.value = ((pw - 0.5) / 0.5) * 0.55;
+      const at = ev.start + 0.4 + 1.4 * rng();
+      roll.connect(rg).connect(lp);
+      roll.start(at);
+      roll.stop(ev.end);
+      nodes.push(roll, rg);
+    }
+    // schiocco solo per i fulmini abbastanza vicini, tanto più forte quanto più vicino e potente
+    if (d > 0.35) {
       const crack = track(ctx.createBufferSource());
       crack.buffer = thunderBuffers.cracks[Math.floor(rng() * thunderBuffers.cracks.length)];
       const cg = ctx.createGain();
-      cg.gain.value = ((d - 0.4) / 0.6) * 0.9 * (0.8 + 0.2 * rng());
+      cg.gain.value = ((d - 0.35) / 0.65) ** 1.3 * (0.45 + 0.65 * pw) * (0.8 + 0.2 * rng());
+      // vicinissimi: lo schiocco arriva insieme al lampo; un po' più lontano, con un leggero ritardo
       crack.connect(cg).connect(pan);
-      crack.start(ev.start);
+      crack.start(ev.start + (1 - d) * 0.25);
       nodes.push(crack, cg);
     }
     rumble.addEventListener("ended", () => {
@@ -216,14 +244,14 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     stopThunder(false);
     const c = config.components.thunder;
     if (!active || !c.on || !thunderBuffers) return;
-    thunderSeq = { ...startSequence(ctx.currentTime, thunderRule(c.frequency / 100), rng), events: thunderSeq.events };
+    thunderSeq = { ...startSequence(ctx.currentTime, thunderRule(c.frequency / 100, (c.power ?? 40) / 100), rng), events: thunderSeq.events };
     topUpThunder();
   }
 
   function topUpThunder() {
     const c = config.components.thunder;
     if (!active || !c.on || !thunderBuffers || disposed) return;
-    const { state, added } = planUntil(thunderSeq, ctx.currentTime + THUNDER_HORIZON_S, thunderRule(c.frequency / 100), rng);
+    const { state, added } = planUntil(thunderSeq, ctx.currentTime + THUNDER_HORIZON_S, thunderRule(c.frequency / 100, (c.power ?? 40) / 100), rng);
     thunderSeq = state;
     added.forEach(playThunder);
   }
@@ -347,7 +375,7 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     if (c.thunder.on) loadThunder();
     set(thunderLevel.gain, c.thunder.on ? level(c.thunder.level, RAIN_GAIN.thunder) : 0, t, c.thunder.on ? TAU / 2 : 0.25);
     if (p && p.thunder.on && !c.thunder.on) stopThunder(true);
-    else if (!p || p.thunder.on !== c.thunder.on || p.thunder.frequency !== c.thunder.frequency || p.thunder.distance !== c.thunder.distance) restartThunder();
+    else if (!p || p.thunder.on !== c.thunder.on || p.thunder.frequency !== c.thunder.frequency || p.thunder.distance !== c.thunder.distance || p.thunder.power !== c.thunder.power) restartThunder();
 
     // vento
     if (c.wind.on && (!p || !p.wind.on)) enableWind();

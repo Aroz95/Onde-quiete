@@ -28,15 +28,21 @@ test("tuoni: più frequenza, più eventi nel tempo", () => {
   const occasional = plan(thunderRule(0.5), hour).all.length;
   const frequent = plan(thunderRule(1), hour).all.length;
   assert.ok(rare < occasional && occasional < frequent, `${rare} < ${occasional} < ${frequent}`);
-  // circa una media di 110 s e 14 s (con margine per la casualità)
-  assert.ok(rare > 20 && rare < 60, `rari: ${rare}/ora`);
-  assert.ok(frequent > 120 && frequent < 330, `frequenti: ${frequent}/ora`);
+  // circa una media di 5 minuti e 7 s (con margine per la casualità)
+  assert.ok(rare > 6 && rare < 22, `rarissimi: ${rare}/ora`);
+  assert.ok(frequent > 250 && frequent < 650, `continui: ${frequent}/ora`);
 });
 
-test("tuoni: mai più di 2 sovrapposti e mai più vicini di 6 s, anche al massimo", () => {
-  const { all } = plan(thunderRule(1), 3600);
-  assert.ok(maxOverlap(all) <= 2);
-  for (let i = 1; i < all.length; i++) assert.ok(all[i].start - all[i - 1].start >= 6 - 1e-9);
+test("tuoni: mai più di 3 sovrapposti e mai più vicini di 4 s, anche al massimo e violenti", () => {
+  const { all } = plan(thunderRule(1, 1), 3600);
+  assert.ok(maxOverlap(all) <= 3);
+  for (let i = 1; i < all.length; i++) assert.ok(all[i].start - all[i - 1].start >= 4 - 1e-9);
+});
+
+test("tuoni: la potenza allunga la coda", () => {
+  const rng = seededRandom(9);
+  const weak = thunderRule(0.5, 0).duration(rng), strong = thunderRule(0.5, 1).duration(seededRandom(9));
+  assert.ok(strong > weak + 8, `${weak} → ${strong}`);
 });
 
 test("intervalli variabili: nessuna sequenza a passo fisso", () => {
@@ -91,5 +97,6 @@ test("ripresa dopo una lunga pausa: nessun evento arretrato recuperato in gruppo
   const fresh = { ...startSequence(resumedAt, rule, rng), events: state.events };
   const { added } = planUntil(fresh, resumedAt + 30, rule, rng);
   assert.ok(added.every((e) => e.start >= resumedAt + 2), "nessun evento nel passato");
-  assert.ok(added.length <= 3, `al massimo pochi eventi nei primi 30 s: ${added.length}`);
+  // ritmo normale (al massimo uno ogni minGap secondi), non le centinaia di tuoni di un'ora di pausa
+  assert.ok(added.length <= Math.ceil(30 / rule.minGap), `al massimo pochi eventi nei primi 30 s: ${added.length}`);
 });

@@ -34,7 +34,7 @@ durante l'ascolto o in pausa, senza interrompere la sessione né il timer.
 | Componente | Controlli | Cosa cambia |
 |---|---|---|
 | Pioggia | intensità (Leggera → Moderata → Intensa → Battente), livello | densità e trama delle gocce, corpo del fondo d'acqua; il volume resta circa lo stesso |
-| Tuoni (facoltativi) | frequenza (Rari → Frequenti), distanza (Lontani → Vicini), livello | quanti tuoni arrivano; lontani gravi e lenti, vicini più chiari con lo schiocco |
+| Tuoni (facoltativi) | frequenza (Rarissimi → Continui), vicinanza (Lontanissimi → Vicinissimi), potenza (Deboli → Violenti), livello | quanti tuoni arrivano; lontani gravi e lenti, vicini più chiari con lo schiocco; i potenti durano di più e rimbombano |
 | Vento (facoltativo) | forza (Brezza → Burrasca), raffiche (Rare → Frequenti), livello | corpo e ululato del vento, frequenza delle raffiche |
 | Altri sottofondi | rumore colorato: colore e livello | — |
 

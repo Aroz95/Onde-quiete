@@ -12,7 +12,7 @@ import { ENVIRONMENTS, scaleWord } from "../environments/model.js";
 
 // nomi visibili dei parametri; il contesto (componente) completa il nome per gli screen reader
 const PARAM_LABEL = {
-  intensity: "Intensità", level: "Livello", frequency: "Frequenza", distance: "Distanza",
+  intensity: "Intensità", level: "Livello", frequency: "Frequenza", distance: "Vicinanza", power: "Potenza",
   strength: "Forza", gusts: "Raffiche", rhythm: "Ritmo", liveliness: "Vivacità", color: "Colore",
 };
 const COLOR_LABEL = { pink: "Rosa", brown: "Marrone", white: "Bianco" };

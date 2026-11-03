@@ -145,3 +145,11 @@ test("riepiloghi degli altri ambienti (per revisione dei testi)", () => {
   for (const id of ENV_IDS) console.log(`  ${id.padEnd(5)} ${summarizeEnv(id, defaultConfig(id)).padEnd(34)} ${describeEnv(id, defaultConfig(id))}`);
   for (const q of Object.keys(ENVIRONMENTS.rain.quick)) console.log(`  rain/${q.padEnd(6)} ${summarizeEnv("rain", baseConfig("rain", q)).padEnd(34)} ${describeEnv("rain", baseConfig("rain", q))}`);
 });
+
+test("tuoni salvati prima della Potenza: si aggiunge il valore predefinito, il resto resta", () => {
+  const old = { base: "storm", components: { thunder: { on: true, frequency: 80, distance: 90, level: 60 } } };
+  const c = validateConfig("rain", old);
+  assert.equal(c.components.thunder.power, 40);
+  assert.deepEqual([c.components.thunder.frequency, c.components.thunder.distance, c.components.thunder.level], [80, 90, 60]);
+  assert.match(describeEnv("rain", c), /tuoni moderati continui vicinissimi/);
+});

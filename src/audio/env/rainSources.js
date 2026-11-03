@@ -56,60 +56,70 @@ function* whiteFill(out, sr, rng) {
 }
 
 // ── gocce ────────────────────────────────────────────────────────────────
-// Ogni goccia è un breve impulso di rumore con attacco arrotondato (niente clic secchi),
-// coda di pochi millisecondi e un colore leggermente diverso dalle altre.
-// Più voci si sovrappongono, come gocce vere che cadono insieme.
-// Niente note intonate: sommate a tante gocce davano un timbro metallico (misura in report).
-const DROP_LAYERS = {
-  // pioggia leggera: ticchettio fitto e morbido, non scoppiettii isolati
-  // hp: quanto si tolgono i bassi; senza, le gocce leggere sembravano piccoli tonfi (crepitio da camino)
-  light: { seconds: 12, perSec: 220, amp: [0.25, 0.6], attack: 0.0006, decay: [0.002, 0.006], lp: [0.18, 0.45], hp: 0.3, voices: 6 },
-  mid: { seconds: 10, perSec: 900, amp: [0.2, 0.6], attack: 0.0004, decay: [0.0015, 0.004], lp: [0.25, 0.55], hp: 0.22, voices: 8 },
-  // scroscio: gocce fittissime e un velo d'acqua continuo
-  heavy: { seconds: 8, perSec: 2600, amp: [0.2, 0.5], attack: 0.0003, decay: [0.001, 0.003], lp: [0.3, 0.65], hp: 0.12, voices: 10, sheet: 0.4 },
+// Una goccia d'acqua che cade su foglie, terra o tetto è un "pat" morbido: un breve soffio
+// di rumore con attacco di 1–3 ms, coda di 8–40 ms e colore medio (1–5 kHz).
+// Le versioni precedenti usavano impulsi di 1–6 ms molto acuti: all'ascolto sembravano
+// granelli duri, cioè grandine. Ogni goccia ha distanza casuale: le lontane (la maggior parte)
+// sono deboli e più scure, le vicine più forti e un po' più chiare.
+//
+// perSec: gocce al secondo · decay: coda (s) · tone: taglio alto (Hz) dalle lontane alle vicine
+// hp: taglio basso (Hz), toglie il tonfo · voices: gocce che possono suonare insieme
+export const DROP_LAYERS = {
+  light: { seconds: 12, perSec: 160, decay: [0.012, 0.04], attack: [0.0015, 0.003], tone: [1300, 4200], hp: 650, voices: 14 },
+  mid: { seconds: 10, perSec: 650, decay: [0.008, 0.026], attack: [0.001, 0.0025], tone: [1500, 4800], hp: 450, voices: 22 },
+  // scroscio: tantissime gocce sovrapposte e un velo d'acqua continuo
+  heavy: { seconds: 8, perSec: 1800, decay: [0.006, 0.018], attack: [0.001, 0.002], tone: [1600, 5200], hp: 250, voices: 28, sheet: 0.35 },
 };
 
-const DROP_YIELD = 4096;
+const DROP_YIELD = 2048;
+const onePole = (hz, sr) => 1 - Math.exp((-2 * Math.PI * hz) / sr);
 
 function dropFill(layer) {
   const L = DROP_LAYERS[layer];
   return function* (out, sr, rng) {
-    const voices = Array.from({ length: L.voices }, () => ({ target: 0, env: 0, dec: 0, lp: 0, lpS: 0, hpS: 0, hpS2: 0 }));
-    const attackK = 1 - Math.exp(-1 / (sr * L.attack));
-    let next = 0, sheetLp = 0;
+    const voices = Array.from({ length: L.voices }, () => ({ env: 0, peak: 0, atk: 0, rising: false, dec: 0, lp: 0, l1: 0, l2: 0, h1: 0, h2: 0 }));
+    const hpK = onePole(L.hp, sr);
+    let next = 0, sheetLp = 0, sheetHp = 0;
     const p = L.perSec / sr;
     const n = out.length;
     for (let i = 0; i < n; i++) {
-      // le gocce costano più del rumore semplice (un filtro per voce): blocchi più piccoli
       if ((i & (DROP_YIELD - 1)) === 0) yield;
       if (rng() < p) {
         const v = voices[next];
         next = (next + 1) % voices.length;
-        v.target = L.amp[0] + (L.amp[1] - L.amp[0]) * rng();
+        const near = rng() ** 2.2; // quasi tutte lontane: poche gocce spiccano
+        v.peak = 0.15 + 0.85 * near;
+        v.rising = true;
+        v.atk = 1 / Math.max(1, sr * (L.attack[0] + rng() * (L.attack[1] - L.attack[0])));
         v.dec = Math.exp(-1 / (sr * (L.decay[0] + rng() * (L.decay[1] - L.decay[0]))));
-        v.lp = L.lp[0] + (L.lp[1] - L.lp[0]) * rng();
+        v.lp = onePole(L.tone[0] + (L.tone[1] - L.tone[0]) * (0.6 * near + 0.4 * rng()), sr);
       }
       let sum = 0;
-      for (const v of voices) {
-        if (v.target > 0) {
-          v.env += (v.target - v.env) * attackK;
-          if (v.env >= v.target * 0.95) v.target = 0; // fine dell'attacco, inizia la coda
+      for (let k = 0; k < voices.length; k++) {
+        const v = voices[k];
+        if (v.rising) {
+          // attacco a rampa morbida (quarto di seno approssimato)
+          v.env += v.atk * v.peak;
+          if (v.env >= v.peak) { v.env = v.peak; v.rising = false; }
         } else {
+          if (v.env < 1e-4) continue;
           v.env *= v.dec;
         }
-        if (v.env < 1e-5) continue;
         const w = rng() * 2 - 1;
-        // due passa-alto in serie (12 dB/ottava): la goccia è un suono acuto, senza tonfo
-        v.hpS += L.hp * (w - v.hpS);
-        const h1 = w - v.hpS;
-        v.hpS2 += L.hp * (h1 - v.hpS2);
-        v.lpS += v.lp * (h1 - v.hpS2 - v.lpS); // ammorbidisce gli acuti estremi
-        sum += v.lpS * v.env;
+        // passa-basso a due poli (12 dB/ottava): la goccia è un "pat", non un "tic"
+        v.l1 += v.lp * (w - v.l1);
+        v.l2 += v.lp * (v.l1 - v.l2);
+        // passa-alto a due poli: nessun tonfo nei bassi
+        v.h1 += hpK * (v.l2 - v.h1);
+        const a = v.l2 - v.h1;
+        v.h2 += hpK * (a - v.h2);
+        sum += (a - v.h2) * v.env;
       }
       if (L.sheet) {
-        // velo d'acqua della pioggia battente, che "ondeggia" lentamente
-        sheetLp += 0.35 * ((rng() * 2 - 1) - sheetLp);
-        sum += sheetLp * L.sheet * (0.75 + 0.25 * Math.sin((2 * Math.PI * 3 * i) / n));
+        // velo d'acqua dello scroscio: rumore medio che "ondeggia" lentamente
+        sheetLp += 0.3 * ((rng() * 2 - 1) - sheetLp);
+        sheetHp += 0.02 * (sheetLp - sheetHp);
+        sum += (sheetLp - sheetHp) * L.sheet * (0.75 + 0.25 * Math.sin((2 * Math.PI * 3 * i) / n));
       }
       out[i] = sum;
     }
@@ -187,7 +197,7 @@ export function rainSources(ctx) {
     windNoise: () => runAsync(stereoLoop(ctx, 9, whiteFill, 12, { rmsTarget: 0.2 })),
     // strati di lunghezza diversa (12, 10, 8 s): insieme si ripetono solo ogni 2 minuti
     drops: (layer) => runAsync(stereoLoop(ctx, DROP_LAYERS[layer].seconds, dropFill(layer), { light: 21, mid: 22, heavy: 23 }[layer], { rmsTarget: 0.12 })),
-    rumble: (v) => runAsync(monoBuffer(ctx, 10 + (v % 2) * 3, 22050, rumbleFill, 100 + v)),
+    rumble: (v) => runAsync(monoBuffer(ctx, 13 + (v % 2) * 4, 22050, rumbleFill, 100 + v)),
     crack: (v) => runAsync(monoBuffer(ctx, 0.7, ctx.sampleRate, crackFill, 200 + v)),
   };
 }

@@ -43,8 +43,11 @@ export const ENVIRONMENTS = {
         optional: true,
         defaultOn: false,
         params: {
-          frequency: scale(["Rari", "Occasionali", "Frequenti"], 45),
-          distance: scale(["Lontani", "Medi", "Vicini"], 20),
+          frequency: scale(["Rarissimi", "Rari", "Occasionali", "Frequenti", "Continui"], 45),
+          // vicinanza: da lontanissimi (rombo grave e ovattato) a vicinissimi (schiocco secco)
+          distance: scale(["Lontanissimi", "Lontani", "Medi", "Vicini", "Vicinissimi"], 20),
+          // potenza: quanto è grande il tuono (durata, rombo grave, schiocco), distinta dal livello
+          power: scale(["Deboli", "Moderati", "Forti", "Violenti"], 40),
           level: level(70),
         },
       },
@@ -73,7 +76,7 @@ export const ENVIRONMENTS = {
         label: "Temporale",
         values: {
           rain: { intensity: 85 },
-          thunder: { on: true, frequency: 55, distance: 45 },
+          thunder: { on: true, frequency: 55, distance: 45, power: 55 },
           wind: { on: true, strength: 60, gusts: 60 },
         },
       },

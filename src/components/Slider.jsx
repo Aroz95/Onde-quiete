@@ -21,7 +21,7 @@ export default function Slider({ id, label, context, value, min, max, step = 1, 
         onChange={(e) => onChange(Number(e.target.value))}
       />
       {/* i valori a parole (es. "Occasionali") usano il carattere normale, i numeri il monospaziato */}
-      <output htmlFor={id} aria-hidden="true" className={/\d/.test(valueText) ? undefined : "word"}>{valueText}</output>
+      <output htmlFor={id} aria-hidden="true" className={/\d/.test(valueText) ? undefined : valueText.length > 10 ? "word long" : "word"}>{valueText}</output>
     </div>
   );
 }
