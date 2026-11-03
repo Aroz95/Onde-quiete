@@ -4,8 +4,8 @@ Per ogni criterio di accettazione: come è stato verificato e cosa manca.
 
 **Legenda**
 - **Unità**: test automatico in `tests/`, eseguito da `npm test` e dal workflow di pubblicazione.
-- **Browser**: prova scriptata in Chromium headless (orologio simulato, stati audio forzati).
-  Gli script sono stati eseguiti durante lo sviluppo ma non sono ancora nel repository (vedi OQ-12).
+- **Browser**: prova scriptata in Chromium headless (orologio simulato, stati audio forzati),
+  in `tests/browser/scenari/`, eseguita con `npm run test:browser`.
 - **Misura**: rendering audio offline in Chromium, con valori numerici.
 - **Dispositivo**: da provare sul telefono con [collaudo-dispositivi.md](collaudo-dispositivi.md). ⏳ = non ancora fatto.
 
@@ -104,8 +104,23 @@ Dettagli in [report-audio.md](report-audio.md).
 | Reattività alla prima selezione | ✅ nessun blocco a CPU normale, 126 ms a 4× | ⏳ iPhone |
 | Correzioni circoscritte con prima/dopo | ✅ tabella nel report | — |
 
-## Da fare per il rilascio
+## OQ-12 Documentazione e controlli di rilascio
 
-1. Prove su iPhone (Safari e app nella Home) della [checklist](collaudo-dispositivi.md), in particolare:
+| Criterio | Esito |
+|---|---|
+| README e testi nell'app descrivono gli stessi comportamenti | ✅ README riscritto e confrontato con i testi dell'app |
+| Ogni controllo documentato è disponibile nel contesto indicato | ✅ tabella per categoria nel README, verificata sul codice |
+| Durata della dissolvenza finale definita e verificata, diversa dallo stop | ✅ 8 s (`FINAL_FADE_S`), misurata; la pausa sfuma in circa 1 s |
+| Build di produzione riuscita | ✅ GitHub Actions: tutte le pubblicazioni del 3 novembre riuscite (test + build Vite) |
+| Test significativi per timer e stati | ✅ 50 test di unità e 86 verifiche nel browser; contro-prova con due difetti introdotti di proposito: rilevati entrambi (6 test e 11 verifiche falliti), poi ripristinati |
+| Evidenze di accessibilità, responsive e dispositivi | ✅ emulazione · ⏳ dispositivi |
+
+## Riepilogo dello stato
+
+Tutti i criteri verificabili in emulazione sono soddisfatti. **Nessun criterio è ancora verificato
+su un dispositivo reale.** Restano da fare:
+
+1. Prove su iPhone (Safari e app nella Home) della [checklist](collaudo-dispositivi.md), in particolare
    pausa e ripresa del timer, schermo bloccato, cambi di suono, dissolvenza finale, scorrimento sopra la barra.
-2. Portare gli script di prova nel browser nel repository, perché siano ripetibili (OQ-12).
+2. Ascolto in cuffia dei punti elencati in [report-audio.md](report-audio.md).
+3. VoiceOver su iPhone per il pannello Regola.

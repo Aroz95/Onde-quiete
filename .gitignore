@@ -3,3 +3,4 @@ dist
 .DS_Store
 *.log
 tools/misure-audio/bundle.js
+tests/browser/.build/

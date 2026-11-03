@@ -9,8 +9,8 @@ con dispositivo e versione. La presenza di un'API nel browser non basta.
 
 ## Già verificato in emulazione
 
-Verificato il 3 novembre 2026 in Chromium headless, con orologio simulato e stati forzati
-(script di prova nella cronologia dei commit di OQ-01, OQ-05 e OQ-02):
+Verificato il 3 novembre 2026 in Chromium headless, con orologio simulato e stati forzati.
+Gli scenari sono in `tests/browser/scenari/` e si rieseguono con `npm run test:browser`:
 
 | Scenario | Esito |
 |---|---|
