@@ -188,7 +188,30 @@ Quanto il tuono (vicinanza 75%) supera la pioggia intensa nel mix completo, volu
 
 "Orecchio" usa la pesatura K. "Telefono" toglie in più tutto ciò che sta sotto i 150 Hz.
 
-Tuoni isolati, livello 70%, misurati dall'arrivo:
+#### Mix e tuoni "che fanno paura" (quarto ascolto)
+
+- **Mix distanze e Mix potenze** (Uguali, Vari, Misti): ogni tuono si allontana dalla scelta in modo
+  casuale. Con "Uguali" sono tutti come scelto; con "Misti" ognuno ha una vicinanza (o potenza)
+  qualsiasi. Verifica: tuoni lontani con mix "Uguali", 0 schiocchi su 15; con "Misti", 6 su 15.
+  Il Temporale parte con entrambi i mix su "Vari"; i Temporali salvati prima prendono i mix dalla
+  configurazione rapida e non risultano personalizzati.
+- **Violenti e vicinissimi:** solo quando un tuono è insieme molto potente e molto vicino:
+  - **Impatto:** un colpo iniziale fino a 2,5 volte il rombo e una saturazione più spinta, quindi un suono più denso.
+  - **Schiocco:** più forte e al centro, su entrambe le orecchie.
+  - **Pioggia e vento:** nel colpo scendono fino a −20 dB e risalgono lentamente.
+
+| Tuono nel mix (pioggia intensa, volume 70%) | Sopra la pioggia (orecchio) | Sopra la pioggia (telefono) | Mezzo secondo più forte |
+|---|---|---|---|
+| Moderati vicini | 6,8 dB | 6,9 dB | −12,1 dB |
+| Forti vicini | 12,1 | 11,7 | −6,8 |
+| Violenti vicini | 15,8 | 14,8 | −3,1 |
+| Violenti vicinissimi | 17,6 | 17,1 | −1,4 |
+
+Il colpo di un tuono violento vicinissimo arriva a −1,4 dB dal massimo digitale già al volume
+del 70%: è il limite fisico dell'uscita. Oltre si può solo aumentare il contrasto,
+abbassando il livello della pioggia o del vento. Caso peggiore: −0,5 dBFS, nessun campione saturato.
+
+Tuoni isolati, livello 70%, misurati dall'arrivo (prima dell'impatto dei violenti vicinissimi):
 
 | Tuono | Picco | Baricentro | Durata |
 |---|---|---|---|

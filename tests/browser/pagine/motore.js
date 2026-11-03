@@ -107,6 +107,27 @@ window.prove = {
   },
 
   // tuono violento vicinissimo: la pioggia si abbassa durante il colpo e poi torna al suo livello
+  // mix delle distanze: con tuoni lontani e mix "Uguali" nessuno schiocca (lo schiocco è solo dei vicini);
+  // con mix "Misti" una parte dei tuoni arriva vicina e schiocca
+  async mix() {
+    const res = {};
+    for (const [name, mix] of [["uguali", 0], ["misti", 100]]) {
+      let cracks = 0, rumbles = 0;
+      const orig = AudioBufferSourceNode.prototype.start;
+      AudioBufferSourceNode.prototype.start = function (...a) {
+        if (this.buffer && !this.loop) { if (this.buffer.sampleRate === 22050) { if (!this.secondary) rumbles++; } else if (Math.abs(this.buffer.duration - 1.4) < 0.01) cracks++; }
+        return orig.apply(this, a);
+      };
+      const cfg = setParam("rain", thunderOnly(100, 10), "thunder", "distanceMix", mix);
+      const { ctx, env } = await prepare(120, cfg, 12);
+      env.setActive(true); env.topUp();
+      await ctx.startRendering();
+      AudioBufferSourceNode.prototype.start = orig;
+      res[name] = { tuoni: rumbles, schiocchi: cracks };
+    }
+    return res;
+  },
+
   // La pioggia si ricava per differenza: stessa scena (stesso seme) resa con e senza pioggia;
   // tuono e pioggia si sommano, quindi la differenza è la sola pioggia, attenuazione compresa.
   async attenuazione() {

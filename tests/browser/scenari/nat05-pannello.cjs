@@ -21,7 +21,7 @@ module.exports = async function (browser, r) {
       r.check(/dialog "Personalizza Pioggia"/.test(await p.locator("body").ariaSnapshot()), "il pannello è letto come finestra 'Personalizza Pioggia'");
       r.check(/switch "Tuoni" \[checked\]/.test(aria) && /switch "Vento" \[checked\]/.test(aria) && /switch "Rumore colorato"/.test(aria),
         "interruttori letti come 'interruttore' con nome e stato");
-      r.check(/slider "Intensità, pioggia"/.test(aria) && /slider "Vicinanza, tuoni"/.test(aria) && /slider "Potenza, tuoni"/.test(aria) && /slider "Forza, vento"/.test(aria),
+      r.check(/slider "Intensità, pioggia"/.test(aria) && /slider "Vicinanza, tuoni"/.test(aria) && /slider "Potenza, tuoni"/.test(aria) && /slider "Mix distanze, tuoni"/.test(aria) && /slider "Forza, vento"/.test(aria),
         "ogni cursore indica componente e fenomeno");
       const vt = await p.$$eval(".sheet input[type=range]", (els) => Object.fromEntries(els.map((e) => [e.id, e.getAttribute("aria-valuetext")])));
       r.check(vt["env-rain-intensity"] === "Battente" && vt["env-thunder-frequency"] === "Occasionali" && /%$/.test(vt["env-rain-level"]),

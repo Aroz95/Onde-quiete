@@ -46,8 +46,12 @@ export const ENVIRONMENTS = {
           frequency: scale(["Rarissimi", "Rari", "Occasionali", "Frequenti", "Continui"], 45),
           // vicinanza: da lontanissimi (rombo grave e ovattato) a vicinissimi (schiocco secco)
           distance: scale(["Lontanissimi", "Lontani", "Medi", "Vicini", "Vicinissimi"], 20),
+          // mix: quanto ogni tuono si allontana dalla vicinanza scelta.
+          // Uguali = tutti come scelto · Vari = attorno alla scelta · Misti = di ogni distanza
+          distanceMix: scale(["Uguali", "Vari", "Misti"], 0),
           // potenza: quanto è grande il tuono (durata, rombo grave, schiocco), distinta dal livello
           power: scale(["Deboli", "Moderati", "Forti", "Violenti"], 40),
+          powerMix: scale(["Uguali", "Vari", "Misti"], 0),
           level: level(70),
         },
       },
@@ -76,7 +80,7 @@ export const ENVIRONMENTS = {
         label: "Temporale",
         values: {
           rain: { intensity: 85 },
-          thunder: { on: true, frequency: 55, distance: 45, power: 55 },
+          thunder: { on: true, frequency: 55, distance: 45, distanceMix: 50, power: 55, powerMix: 40 },
           wind: { on: true, strength: 60, gusts: 60 },
         },
       },
@@ -218,8 +222,8 @@ export function isCustomized(envId, config) {
 
 // ── validazione ──────────────────────────────────────────────────────────
 
-function validateComponent(comp, raw) {
-  const out = componentDefaults(comp);
+function validateComponent(comp, raw, fallback = componentDefaults(comp)) {
+  const out = { ...fallback };
   if (!raw || typeof raw !== "object") return out;
   if (comp.optional && typeof raw.on === "boolean") out.on = raw.on;
   for (const [k, p] of Object.entries(comp.params)) {
@@ -240,7 +244,10 @@ export function validateConfig(envId, raw) {
   if (!raw || typeof raw !== "object") return fallback;
   const base = raw.base === null || (typeof raw.base === "string" && env.quick[raw.base]) ? raw.base : fallback.base;
   const components = {};
-  for (const [cid, comp] of Object.entries(env.components)) components[cid] = validateComponent(comp, raw.components?.[cid]);
+  // ciò che manca si prende dalla configurazione rapida di partenza, non dal valore generico:
+  // così un parametro aggiunto in una versione nuova non fa risultare "personalizzato" un Temporale intatto
+  const ref = baseConfig(envId, base);
+  for (const [cid, comp] of Object.entries(env.components)) components[cid] = validateComponent(comp, raw.components?.[cid], ref.components[cid]);
   return { base, components };
 }
 

@@ -230,9 +230,9 @@ window.tuoni = async () => {
 // quanto il secondo più forte di un tuono supera il livello tipico della pioggia
 window.potenza = async () => {
   const res = {};
-  for (const power of [40, 75, 100]) {
+  for (const [label, power, dist] of [["moderati vicini", 40, 75], ["forti vicini", 75, 75], ["violenti vicini", 100, 75], ["violenti vicinissimi", 100, 100]]) {
     let c = applyQuick("rain", defaultConfig("rain"), "storm");
-    for (const [cid, k, v] of [["thunder", "power", power], ["thunder", "distance", 75], ["thunder", "frequency", 45], ["wind", "on", false]]) c = setParam("rain", c, cid, k, v);
+    for (const [cid, k, v] of [["thunder", "power", power], ["thunder", "distance", dist], ["thunder", "frequency", 45], ["thunder", "distanceMix", 0], ["thunder", "powerMix", 0], ["wind", "on", false]]) c = setParam("rain", c, cid, k, v);
     const row = {};
     // "orecchio": pesatura K; "telefono": in più si toglie ciò che sta sotto i 150 Hz,
     // che l'altoparlante di un telefono non riproduce
@@ -242,8 +242,9 @@ window.potenza = async () => {
       for (let i = SR * 2; i + SR / 2 <= L.length; i += SR / 4) { let q = 0; for (let j = i; j < i + SR / 2; j++) q += L[j] * L[j]; lv.push(db(Math.sqrt(q / (SR / 2)))); }
       const sorted = [...lv].sort((a, b) => a - b);
       row[name] = +(sorted[sorted.length - 1] - sorted[Math.floor(sorted.length * 0.3)]).toFixed(1);
+      if (!phone) row.colpoDbFS = +sorted[sorted.length - 1].toFixed(1); // livello assoluto del mezzo secondo più forte
     }
-    res["potenza " + power] = row;
+    res[label] = row;
   }
   return res;
 };

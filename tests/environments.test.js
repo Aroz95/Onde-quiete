@@ -147,9 +147,27 @@ test("riepiloghi degli altri ambienti (per revisione dei testi)", () => {
 });
 
 test("tuoni salvati prima della Potenza: si aggiunge il valore predefinito, il resto resta", () => {
-  const old = { base: "storm", components: { thunder: { on: true, frequency: 80, distance: 90, level: 60 } } };
+  const old = { base: "light", components: { thunder: { on: true, frequency: 80, distance: 90, level: 60 } } };
+  // da un Temporale, la potenza mancante è quella del Temporale
+  assert.equal(validateConfig("rain", { ...old, base: "storm" }).components.thunder.power, 55);
   const c = validateConfig("rain", old);
   assert.equal(c.components.thunder.power, 40);
   assert.deepEqual([c.components.thunder.frequency, c.components.thunder.distance, c.components.thunder.level], [80, 90, 60]);
   assert.match(describeEnv("rain", c), /tuoni moderati continui vicinissimi/);
+});
+
+test("mix di vicinanza e potenza: descritti a parole, compatibili con i dati salvati", () => {
+  let c = setParam("rain", rain(), "thunder", "on", true);
+  assert.match(describeEnv("rain", c), /tuoni moderati occasionali lontani/);
+  c = setParam("rain", c, "thunder", "distanceMix", 100);
+  assert.match(describeEnv("rain", c), /tuoni moderati occasionali a ogni distanza/);
+  assert.match(summarizeEnv("rain", c), /Tuoni/);
+  assert.doesNotMatch(summarizeEnv("rain", c), /lontani/);
+  c = setParam("rain", c, "thunder", "powerMix", 50);
+  assert.match(describeEnv("rain", c), /tuoni occasionali per lo più moderati e a ogni distanza/);
+  // un Temporale salvato prima dei mix non risulta personalizzato: i valori mancanti vengono dalla base
+  const storm = applyQuick("rain", rain(), "storm");
+  const saved = JSON.parse(JSON.stringify(storm));
+  delete saved.components.thunder.distanceMix; delete saved.components.thunder.powerMix;
+  assert.equal(isCustomized("rain", validateConfig("rain", saved)), false);
 });

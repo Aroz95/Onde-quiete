@@ -138,6 +138,7 @@ test di unità in `tests/environments.test.js` e `tests/scheduler.test.js`.
 | Gocce d'acqua, non grandine (secondo ascolto) | — | ✅ brillantezza 9.810 → 3.850 Hz, gocce da 6–40 ms | ⏳ riascolto |
 | Tuoni e vento indipendenti | ✅ | ✅ | — |
 | Frequenza, vicinanza, potenza e livello dei tuoni distinti (scale ampliate su richiesta) | ✅ | ✅ 1 → 35 tuoni in 4 min; 113 → 932 Hz; 4,8 → 14,6 s | ⏳ ascolto |
+| Mix di vicinanza e potenza; violenti vicinissimi "che fanno paura" (quarto ascolto) | ✅ | ✅ 0 → 6 schiocchi su 15 con mix Misti; colpo a −1,4 dB dal massimo, pioggia −20 dB nel colpo | ⏳ riascolto |
 | Tuoni forti con bassi udibili anche su telefono (terzo ascolto) | — | ✅ violenti +1,9 → +11 dB sulla pioggia (banda da telefono); pioggia −8 dB durante il colpo e ritorno | ⏳ riascolto |
 | Burrasca non cambia pioggia né volume generale | ✅ | ✅ | — |
 | Leggera → temporale → leggera senza interrompere il timer | — | ✅ | ⏳ |

@@ -24,7 +24,8 @@ const SHORT = {
     audible(ENVIRONMENTS.rain.components.rain, c.rain) && w("rain", "intensity"),
     // nella sintesi breve la distanza si precisa solo agli estremi
     audible(ENVIRONMENTS.rain.components.thunder, c.thunder) &&
-      ({ Lontanissimi: "Tuoni lontani", Lontani: "Tuoni lontani", Vicini: "Tuoni vicini", Vicinissimi: "Tuoni vicini" }[w("thunder", "distance")] || "Tuoni"),
+      ((w("thunder", "distanceMix") === "Uguali" &&
+        { Lontanissimi: "Tuoni lontani", Lontani: "Tuoni lontani", Vicini: "Tuoni vicini", Vicinissimi: "Tuoni vicini" }[w("thunder", "distance")]) || "Tuoni"),
     audible(ENVIRONMENTS.rain.components.wind, c.wind) && (w("wind", "strength") === "Burrasca" ? "Burrasca" : `Vento ${lower(w("wind", "strength"))}`),
   ],
   sea: (c, w) => [
@@ -60,7 +61,13 @@ export function describeEnv(envId, config) {
     if (audible(R.rain, c.rain)) parts.push(`pioggia ${w("rain", "intensity")}`);
     if (audible(R.thunder, c.thunder)) {
       const dist = { medi: "a media distanza" }[w("thunder", "distance")] || w("thunder", "distance");
-      parts.push(`tuoni ${w("thunder", "power")} ${w("thunder", "frequency")} ${dist}`);
+      const power = w("thunder", "power");
+      // con il mix "Uguali" si dice com'è ogni tuono; con "Vari" com'è la maggior parte; con "Misti" che variano
+      const powerPart = { uguali: power, vari: `per lo più ${power}`, misti: "di ogni potenza" }[w("thunder", "powerMix")];
+      const distPart = { uguali: dist, vari: `per lo più ${dist}`, misti: "a ogni distanza" }[w("thunder", "distanceMix")];
+      const fixed = [w("thunder", "powerMix") === "uguali" && powerPart, w("thunder", "frequency"), w("thunder", "distanceMix") === "uguali" && distPart].filter(Boolean);
+      const varied = [w("thunder", "powerMix") !== "uguali" && powerPart, w("thunder", "distanceMix") !== "uguali" && distPart].filter(Boolean);
+      parts.push(`tuoni ${fixed.join(" ")}${varied.length ? " " + varied.join(" e ") : ""}`);
     }
     if (audible(R.wind, c.wind)) parts.push(w("wind", "strength") === "burrasca" ? `burrasca a raffiche ${w("wind", "gusts")}` : `vento ${w("wind", "strength")} a raffiche ${w("wind", "gusts")}`);
   } else {

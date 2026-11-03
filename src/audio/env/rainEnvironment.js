@@ -170,8 +170,13 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
 
   function playThunder(ev) {
     const c = config.components.thunder;
-    const d = c.distance / 100; // 0 lontanissimo, 1 vicinissimo
-    const pw = (c.power ?? 40) / 100; // 0 debole, 1 violento
+    // ogni tuono può allontanarsi dalla scelta: con il mix a zero sono tutti uguali,
+    // al massimo ognuno ha una vicinanza (o potenza) qualsiasi
+    const vary = (center, mix) => (center + (mix / 100) * (rng() * 100 - center)) / 100;
+    const d = vary(c.distance, c.distanceMix ?? 0); // 0 lontanissimo, 1 vicinissimo
+    const pw = vary(c.power ?? 40, c.powerMix ?? 0); // 0 debole, 1 violento
+    // "paura": cresce solo quando un tuono è insieme violento e vicinissimo
+    const fear = Math.max(0, (pw * d - 0.5) / 0.5) ** 2;
     const pan = ctx.createStereoPanner();
     // i tuoni vicini si sentono più "di lato", quelli lontani più diffusi al centro
     pan.pan.value = (rng() * 2 - 1) * (0.3 + 0.5 * d);
@@ -201,7 +206,7 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     // l'altoparlante non arriva (un tuono forte vero "gratta"); quasi assente nei tuoni deboli e lontani
     const sat = 0.15 + 0.85 * pw ** 2 * (0.4 + 0.6 * d);
     const drive = ctx.createGain();
-    drive.gain.value = sat;
+    drive.gain.value = sat * (1 + 2.5 * fear); // il tuono violento vicino "esplode": più denso e più forte
     const shaper = ctx.createWaveShaper();
     shaper.curve = THUNDER_CURVE;
     shaper.oversample = "2x";
@@ -212,10 +217,16 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     const boost = 0.5 + 0.55 * pw + 2.4 * pw ** 3;
     const amp = (0.4 + 0.6 * d ** 1.2) * boost * (0.8 + 0.2 * rng());
     const attack = 0.03 + 2.2 * (1 - d) ** 1.5;
-    const hold = 2 + 9 * pw; // quanto resta pieno prima di spegnersi
+    const hold = 2 + 9 * pw + 3 * fear; // quanto resta pieno prima di spegnersi
     const tau = 0.6 + 1.8 * pw;
     g.gain.setValueAtTime(0, ev.start);
-    g.gain.linearRampToValueAtTime(amp, ev.start + attack);
+    if (fear > 0.05) {
+      // impatto: un colpo che supera il rombo e si assesta in un secondo e mezzo
+      g.gain.linearRampToValueAtTime(amp * (1 + 1.5 * fear), ev.start + attack);
+      g.gain.setTargetAtTime(amp, ev.start + attack + 0.15, 0.5);
+    } else {
+      g.gain.linearRampToValueAtTime(amp, ev.start + attack);
+    }
     g.gain.setTargetAtTime(0, ev.start + attack + hold, tau);
     rumble.connect(hp).connect(lp).connect(shelf).connect(drive).connect(shaper).connect(makeup).connect(g).connect(pan);
     rumble.start(ev.start);
@@ -223,7 +234,7 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     ev.end = Math.min(ev.start + rumble.buffer.duration / rumble.playbackRate.value, fadeEnd);
     rumble.stop(ev.end + 0.05);
     nodes.push(rumble, hp, lp, shelf, drive, shaper, makeup, g);
-    duckFor(ev.start, attack, hold, d, pw);
+    duckFor(ev.start, attack, hold, d, pw, fear);
     // tuoni forti: un secondo rotolio sovrapposto, poco dopo il primo
     if (pw > 0.5) {
       const roll = track(ctx.createBufferSource());
@@ -243,9 +254,10 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
       const crack = track(ctx.createBufferSource());
       crack.buffer = thunderBuffers.cracks[Math.floor(rng() * thunderBuffers.cracks.length)];
       const cg = ctx.createGain();
-      cg.gain.value = ((d - 0.35) / 0.65) ** 1.3 * (0.45 + 0.65 * pw + 1.2 * pw ** 3) * (0.8 + 0.2 * rng());
-      // vicinissimi: lo schiocco arriva insieme al lampo; un po' più lontano, con un leggero ritardo
-      crack.connect(cg).connect(pan);
+      cg.gain.value = ((d - 0.35) / 0.65) ** 1.3 * (0.45 + 0.65 * pw + 1.2 * pw ** 3) * (1 + 1.5 * fear) * (0.8 + 0.2 * rng());
+      // vicinissimi: lo schiocco arriva insieme al lampo; un po' più lontano, con un leggero ritardo.
+      // Il fulmine vicino violento schiocca "addosso": al centro, su entrambe le orecchie
+      crack.connect(cg).connect(fear > 0.3 ? thunderLevel : pan);
       crack.start(ev.start + (1 - d) * 0.25);
       nodes.push(crack, cg);
     }
@@ -256,12 +268,18 @@ export function createRainEnvironment(ctx, destination, initialConfig, { onStatu
     thunderEvents.set(ev, { gain: g, sources: nodes.filter((n) => n instanceof AudioScheduledSourceNode) });
   }
 
-  function duckFor(start, attack, hold, d, pw) {
-    // fino a −8 dB per un tuono violento vicinissimo a livello pieno; nulla se i tuoni sono muti
-    const depth = 0.6 * pw ** 2 * (0.3 + 0.7 * d) * (config.components.thunder.level / 100);
+  function duckFor(start, attack, hold, d, pw, fear) {
+    // fino a −8 dB per un tuono violento; nel colpo di un fulmine violento vicinissimo
+    // pioggia e vento quasi spariscono (fino a −20 dB), poi risalgono piano.
+    // Nulla se i tuoni sono muti
+    const lvl = config.components.thunder.level / 100;
+    const depth = 0.6 * pw ** 2 * (0.3 + 0.7 * d) * lvl;
+    const impact = Math.min(0.9, depth + 0.3 * fear * lvl);
     if (depth < 0.08) return;
-    duck.gain.setTargetAtTime(1 - depth, start + Math.max(0, attack - 0.05), 0.06);
-    duck.gain.setTargetAtTime(1, start + attack + hold * 0.6, 1.4);
+    const hit = start + Math.max(0, attack - 0.05);
+    duck.gain.setTargetAtTime(1 - impact, hit, 0.02);
+    if (impact > depth) duck.gain.setTargetAtTime(1 - depth, hit + 1.2, 0.8);
+    duck.gain.setTargetAtTime(1, start + attack + hold * 0.6, 1.4 + 1.5 * fear);
   }
 
   // annulla i tuoni non ancora iniziati; quelli in corso sfumano se `fadeCurrent`

@@ -19,6 +19,11 @@ module.exports = async function (browser, r) {
   r.check(s.nuoviEventiDopo === 0 && s.livelloDopo < -80, "dopo lo spegnimento non arrivano nuovi tuoni");
 
   const pa = await run("pausa");
+  const mx = await run("mix");
+  r.info(`tuoni lontani con mix "Uguali": ${mx.uguali.schiocchi} schiocchi su ${mx.uguali.tuoni}; con mix "Misti": ${mx.misti.schiocchi} su ${mx.misti.tuoni}`);
+  r.check(mx.uguali.schiocchi === 0 && mx.misti.schiocchi >= mx.misti.tuoni * 0.3 && mx.misti.schiocchi < mx.misti.tuoni,
+    "mix delle distanze: tuoni tutti uguali con 'Uguali', di ogni distanza con 'Misti'");
+
   const at = await run("attenuazione");
   const { forte: f2, muto } = at;
   r.info(`pioggia con un tuono violento vicinissimo: ${f2.prima} → ${f2.durante} → ${f2.dopo} dB; con tuoni a livello zero: ${muto.prima} → ${muto.durante} dB`);
