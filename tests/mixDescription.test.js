@@ -1,7 +1,7 @@
 // Test delle descrizioni dei preset (OQ-07).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { describeMix, mixParts, needsHeadphones } from "../src/mixDescription.js";
+import { describeMix, shortMix, mixParts, needsHeadphones } from "../src/mixDescription.js";
 import { PRESETS, PRESET_GROUPS } from "../src/presets.js";
 
 test("ogni preset ha una descrizione breve, senza Hz", () => {
@@ -61,6 +61,40 @@ test("le cuffie servono solo con un battimento binaurale udibile", () => {
   assert.equal(needsHeadphones({ ...by("relax"), tone: 0 }), false);
 });
 
+test("descrizione breve: al massimo 3 parti e 40 caratteri", () => {
+  for (const p of PRESETS) {
+    const d = shortMix(p);
+    assert.ok(d.split(" · ").length <= 3 && d.length <= 40, `${p.id}: "${d}"`);
+    assert.ok(!/hz/i.test(d), `${p.id}: "${d}"`);
+  }
+});
+
+test("descrizione breve: diversa tra i preset della stessa scheda", () => {
+  for (const g of PRESET_GROUPS) {
+    const seen = new Map();
+    for (const p of g.presets) {
+      const d = shortMix(p);
+      assert.ok(!seen.has(d), `${p.id} e ${seen.get(d)}: "${d}"`);
+      seen.set(d, p.id);
+    }
+  }
+});
+
+test("descrizione breve: Relax/Calma e Studio/Concentrazione distinti", () => {
+  const by = (id) => shortMix(PRESETS.find((p) => p.id === id));
+  assert.notEqual(by("relax"), by("calm"));
+  assert.notEqual(by("study"), by("focus"));
+  assert.notEqual(by("relax"), by("focus"));
+});
+
+test("descrizione breve: nessun suono spento", () => {
+  const sleep = PRESETS.find((p) => p.id === "sleep");
+  assert.match(shortMix(sleep), /Onde/);
+  assert.doesNotMatch(shortMix({ ...sleep, nature: 0 }), /Onde/);
+  assert.doesNotMatch(shortMix({ ...sleep, noise: 0 }), /Rumore/);
+  assert.doesNotMatch(shortMix({ ...sleep, tone: 0 }), /Tono/);
+});
+
 test("descrizioni attuali dei preset (per revisione dei testi)", () => {
-  for (const g of PRESET_GROUPS) for (const p of g.presets) console.log(`  ${g.id.padEnd(9)} ${p.name.padEnd(15)} ${describeMix(p)}`);
+  for (const g of PRESET_GROUPS) for (const p of g.presets) console.log(`  ${g.id.padEnd(9)} ${p.name.padEnd(15)} ${shortMix(p).padEnd(38)} ${describeMix(p)}`);
 });

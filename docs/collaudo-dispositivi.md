@@ -46,6 +46,10 @@ Compilare una colonna per dispositivo. Esito: ✅ funziona · ⚠️ funziona co
 | 11. Controlli nella schermata di blocco: play/pausa coerenti | | | | | |
 | 12. Interruttore silenzioso attivo (solo iPhone): l'audio si sente | | | | — | — |
 | 13. Cambio scheda del browser e ritorno | | | | | |
+| 14. Pausa a metà timer, attesa, ripresa: il residuo riparte da dove era | | | | | |
+| 15. Cambio tra suoni della natura e colori del rumore: nessuno stacco brusco | | | | | |
+| 16. Scorrendo fino in fondo, l'ultima tessera e la nota restano sopra la barra | | | | | |
+| 17. VoiceOver: pannello Regola letto come finestra, cursori con nome e valore | | | | — | |
 
 ### Come eseguire i passi
 

@@ -3,7 +3,7 @@ import { useId, useRef } from "react";
 // Gruppo di scelte a pillole (una sola selezionata), più comodo di un menu a tendina sul telefono.
 // Segue lo schema dei radio button: un solo tasto Tab per entrare nel gruppo,
 // frecce per spostarsi tra le opzioni.
-export default function Pills({ label, context, options, value, onChange, onCommit }) {
+export default function Pills({ label, context, options, value, onChange, onCommit, className = "" }) {
   const id = useId();
   const refs = useRef([]);
   const selected = Math.max(0, options.findIndex((o) => o.value === value));
@@ -23,7 +23,7 @@ export default function Pills({ label, context, options, value, onChange, onComm
     <div className="field">
       <span className="field-label" id={id}>{label}</span>
       <div
-        className="pills"
+        className={`pills ${className}`.trim()}
         role="radiogroup"
         aria-labelledby={context ? undefined : id}
         aria-label={context ? `${label}, ${context}` : undefined}

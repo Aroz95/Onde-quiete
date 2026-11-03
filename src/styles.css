@@ -53,11 +53,10 @@ body {
   border-radius: 22px; background: var(--panel); border: 1px solid var(--line);
 }
 /* l'onda sta sopra, il testo sotto: non si sovrappongono mai */
-.scope canvas { display: block; width: 100%; height: 120px; }
-.readout { display: flex; flex-direction: column; gap: 2px; padding: 0 18px 16px; pointer-events: none; }
+.scope canvas { display: block; width: 100%; height: 92px; }
+.readout { display: flex; flex-direction: column; gap: 0; padding: 0 16px 12px; pointer-events: none; }
 .now-state { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; color: var(--accent); }
-.now-timer { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
-.mode { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-weight: 700; font-size: 1.35rem; line-height: 1.2; }
+.mode { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-weight: 700; font-size: 1.25rem; line-height: 1.25; }
 .now-desc { font-size: 0.88rem; color: var(--muted); line-height: 1.35; }
 .badge {
   font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
@@ -102,8 +101,17 @@ body {
   border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line);
 }
 
-.hint-line { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 0.82rem; color: var(--muted); }
-.hint-line .icon { width: 18px; height: 18px; margin-top: 1px; color: var(--accent2); }
+/* cuffie: indicazione breve, spiegazione espandibile */
+.hint-line { font-size: 0.82rem; color: var(--muted); }
+.hint-line summary {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; list-style: none; border-radius: 8px;
+}
+.hint-line summary::-webkit-details-marker { display: none; }
+.hint-line summary::after { content: "Perché?"; font-size: 0.76rem; color: var(--accent2); text-decoration: underline; text-underline-offset: 3px; }
+.hint-line[open] summary::after { content: "Chiudi"; }
+.hint-line summary:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+.hint-line p { margin: 4px 0 0 26px; max-width: 52ch; }
+.hint-line .icon { width: 18px; height: 18px; color: var(--accent2); }
 
 /* messaggio di stato della riproduzione (audio interrotto, browser non supportato) */
 .status-msg {
@@ -120,16 +128,16 @@ body {
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .chip {
   --tint: var(--accent);
-  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
-  min-height: 132px; padding: 14px; min-width: 0;
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 12px 14px; min-width: 0;
   border-radius: var(--radius); border: 1px solid var(--line); background: var(--panel); color: var(--fg);
   font-family: var(--display); text-align: left; cursor: pointer;
   transition: border-color 0.15s, background 0.15s, transform 0.15s;
 }
 .chip:hover { background: var(--panel-2); }
 .chip:active { transform: scale(0.98); }
-.chip-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 26px; }
-.chip-icon { width: 26px; height: 26px; color: var(--tint); stroke-width: 1.7; }
+.chip-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 22px; }
+.chip-icon { width: 22px; height: 22px; color: var(--tint); stroke-width: 1.7; }
 .chip b { font-weight: 700; font-size: 1rem; line-height: 1.2; overflow-wrap: anywhere; }
 .chip-desc { font-size: 0.8rem; line-height: 1.35; color: var(--muted); }
 .chip-tag { margin-top: auto; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent2); }
@@ -143,8 +151,6 @@ body {
   font-size: 0.7rem; font-weight: 700; background: var(--accent); color: var(--accent-ink); white-space: nowrap;
 }
 .chip-check { width: 13px; height: 13px; stroke-width: 3; }
-/* ultimo pulsante rimasto solo nella riga: occupa tutta la larghezza */
-.grid .chip:last-child:nth-child(odd) { grid-column: span 2; min-height: 0; }
 
 .note { font-size: 0.8rem; color: var(--muted); margin: 0; }
 .note b { color: var(--warn); font-weight: 600; }
@@ -193,6 +199,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   flex: 1 1 auto; min-width: 0; min-height: 38px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--bg); color: var(--fg); font-family: var(--display); font-size: 0.88rem; cursor: pointer;
 }
+/* durate del timer: quattro colonne uguali, "Disattivato" su una riga a parte */
+.timer-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.timer-grid .pill:last-child { grid-column: 1 / -1; background: transparent; }
+.timer-grid .pill:last-child[aria-checked="true"] { background: var(--panel-2); border-color: var(--muted); color: var(--fg); }
 .pill[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
 /* focus da tastiera ben visibile su tutto ciò che si attiva */
@@ -257,8 +267,6 @@ body.sheet-open { overflow: hidden; }
   .controls { grid-template-columns: 1fr; }
   .adjust { justify-content: center; }
   .grid { grid-template-columns: 1fr; }
-  .grid .chip:last-child:nth-child(odd) { grid-column: auto; }
-  .chip { min-height: 0; }
   .tab span { font-size: 0.62rem; }
 }
 
@@ -266,7 +274,6 @@ body.sheet-open { overflow: hidden; }
 @media (min-width: 640px) {
   .wrap { max-width: 680px; }
   .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .grid .chip:last-child:nth-child(odd) { grid-column: auto; min-height: 132px; }
   .tabbar-inner { max-width: 680px; }
 }
 

@@ -6,11 +6,11 @@ import { TIMER_OPTIONS } from "../presets.js";
 // Volume generale e timer sempre a portata di mano sotto Avvia (ticket OQ-06).
 // Condividono lo stato con il resto dell'app: non sono una copia dei controlli.
 
-const timerOptions = TIMER_OPTIONS.map((o) => ({
-  value: o.value,
-  label: o.value ? `${o.value} min` : "No",
-  srLabel: o.value ? `${o.value} minuti` : "nessun timer",
-}));
+// prima le quattro durate, poi "Disattivato" su una riga a parte
+const timerOptions = [
+  ...TIMER_OPTIONS.filter((o) => o.value).map((o) => ({ value: o.value, label: `${o.value} min`, srLabel: `${o.value} minuti` })),
+  { value: 0, label: "Disattivato", srLabel: "timer disattivato" },
+];
 
 export function timerLabel({ durationMin, remaining, running }) {
   if (!durationMin) return "Timer disattivato";
@@ -85,6 +85,7 @@ export default function QuickControls({ volume, onVolume, timerMin, onTimer, rem
 
       <div id={popId} ref={popRef} className="timer-pop" hidden={!open}>
         <Pills
+          className="timer-grid"
           label="Spegni dopo"
           options={timerOptions}
           value={timerMin}

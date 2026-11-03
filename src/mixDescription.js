@@ -90,6 +90,42 @@ export function describeMix(s) {
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
+// versione breve per le tessere: una o due parole per componente
+const NATURE_SHORT_MAIN = {
+  rain: "Pioggia costante",
+  waves: "Onde lente",
+  wind: "Raffiche di vento",
+  fire: "Fuoco scoppiettante",
+  storm: "Pioggia e tuoni",
+};
+const NATURE_SHORT_SIDE = { rain: "Pioggia", waves: "Onde", wind: "Vento", fire: "Camino", storm: "Temporale" };
+// il ritmo della pulsazione è ciò che distingue a orecchio i preset con lo stesso tono
+function pulseShort(beat) {
+  if (beat < 4) return "Tono lentissimo";
+  if (beat < 8) return "Tono lento";
+  if (beat < 13) return "Tono calmo";
+  if (beat < 30) return "Tono vivace";
+  return "Tono rapido";
+}
+function noteShort(car) {
+  if (car < 420) return "Nota bassa";
+  if (car < 560) return "Nota media";
+  return "Nota alta";
+}
+
+/** Descrizione breve per le tessere, es. "Tono calmo · Rumore rosa". */
+export function shortMix(s) {
+  const parts = mixParts(s);
+  if (!parts.length) return "Livelli a zero";
+  return parts
+    .map((p, i) => {
+      if (p.kind === "tone") return s.beat > 0 ? pulseShort(s.beat) : noteShort(s.car);
+      if (p.kind === "nature") return (i === 0 ? NATURE_SHORT_MAIN : NATURE_SHORT_SIDE)[p.type];
+      return `Rumore ${NOISE_COLOR[s.noiseType]}`;
+    })
+    .join(" · ");
+}
+
 /** Il mix contiene un battimento binaurale udibile: solo allora servono le cuffie. */
 export function needsHeadphones(s) {
   return s.tone > 0 && s.beat > 0;

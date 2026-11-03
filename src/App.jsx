@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRESETS, PRESET_GROUPS, kindOf } from "./presets.js";
-import { describeMix, needsHeadphones } from "./mixDescription.js";
+import { describeMix, shortMix, needsHeadphones } from "./mixDescription.js";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { playButton, playbackMessage } from "./audio/playbackState.js";
 import { updateMediaSession } from "./audio/background.js";
@@ -183,6 +183,7 @@ export default function App() {
   const message = playbackMessage(playback);
 
   const description = describeMix(settings);
+  const short = shortMix(settings);
   const headphones = needsHeadphones(settings);
 
   // stato scritto (non solo colorato) del preset selezionato
@@ -216,15 +217,12 @@ export default function App() {
           {/* visualizzazione decorativa: non misura il suono né l'attività cerebrale */}
           <Scope {...settings} playing={playing} />
           <span className="readout">
-            <span className="now-state">
-              {stateWord}
-              {remaining && <span className="now-timer"> · {timerPaused ? "restano" : "si spegne tra"} {remaining}</span>}
-            </span>
+            <span className="now-state">{stateWord}</span>
             <span className="mode">
               {settings.name}
               {modified && <span className="badge">su misura</span>}
             </span>
-            <span className="now-desc">{description}</span>
+            <span className="now-desc">{short}</span>
           </span>
         </button>
 
@@ -258,12 +256,18 @@ export default function App() {
           {message}
         </p>
 
-        {headphones && (
-          <p className="hint-line">
+        {/* cuffie: indicazione breve sempre visibile, spiegazione a richiesta */}
+        <details className="hint-line">
+          <summary>
             <Icon name="headphones" />
-            <span>Usa le cuffie: l'effetto binaurale nasce da un suono diverso per ogni orecchio.</span>
+            <span>{headphones ? "Usa le cuffie" : "Cuffie consigliate"}</span>
+          </summary>
+          <p>
+            {headphones
+              ? "L'effetto binaurale nasce da un suono leggermente diverso in ciascun orecchio: dagli altoparlanti non si sente."
+              : "Questo suono funziona anche dagli altoparlanti; in cuffia si apprezza meglio lo spazio stereo."}
           </p>
-        )}
+        </details>
       </section>
 
       {PRESET_GROUPS.map((group) => (
@@ -278,7 +282,7 @@ export default function App() {
           <div className="panel-head">
             <h2 className="label">{group.title}</h2>
             <p className="panel-hint">
-              {active ? "Tocca un altro suono per passare a quello. Il timer continua." : "Tocca un suono per ascoltarlo."}
+              {!active ? "Tocca un suono per ascoltarlo" : timer.durationMin ? "Cambia suono senza interrompere il timer" : "Tocca un suono per cambiarlo"}
             </p>
           </div>
           <div className="grid">
@@ -305,7 +309,7 @@ export default function App() {
                     )}
                   </span>
                   <b>{p.name}</b>
-                  <span className="chip-desc">{describeMix(shown)}</span>
+                  <span className="chip-desc">{shortMix(shown)}</span>
                   {tweaks[p.id] && <span className="chip-tag">su misura</span>}
                   {!active && <span className="sr-only">, tocca per ascoltare</span>}
                 </button>
