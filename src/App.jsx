@@ -6,6 +6,10 @@ import Scope from "./components/Scope.jsx";
 import UpdateBanner from "./components/UpdateBanner.jsx";
 import TabBar from "./components/TabBar.jsx";
 import AdjustSheet from "./components/AdjustSheet.jsx";
+import {
+  createTimer, resumeTimer, pauseTimer, setTimerDuration, finishTimer,
+  timerRemaining, timerExpired, formatRemaining,
+} from "./timer.js";
 
 const TABS = [
   { id: "needs", label: "Esigenze" },
@@ -53,9 +57,8 @@ export default function App() {
   // modifiche dell'utente, separate per ogni preset: { relax: { beat: 9 }, rain: { nature: 60 } }
   const [tweaks, setTweaks] = useState(() => load(STORE.tweaks, {}));
   const [volume, setVolume] = useState(() => load(STORE.volume, 70));
-  const [timerMin, setTimerMin] = useState(0);
-  const [endAt, setEndAt] = useState(0);
-  const [remaining, setRemaining] = useState("");
+  const [timer, setTimer] = useState(() => createTimer(0));
+  const [now, setNow] = useState(() => Date.now());
   const [tab, setTab] = useState(() => {
     const t = load(STORE.tab, "needs");
     return TABS.some((x) => x.id === t) ? t : "needs";
@@ -99,44 +102,58 @@ export default function App() {
       return next;
     });
 
+  // Avvia o riprende: il timer riparte dal residuo, oppure dalla durata intera se è una nuova sessione.
   const start = () => {
+    const t = Date.now();
     setRunning(true);
-    setEndAt(timerMin ? Date.now() + timerMin * 60000 : 0);
+    setTimer((tm) => resumeTimer(tm, t));
+    setNow(t);
   };
-  const stop = () => {
+  // Pausa: l'audio si ferma e il residuo resta congelato.
+  const pause = () => {
+    const t = Date.now();
     setRunning(false);
-    setEndAt(0);
-    setRemaining("");
+    setTimer((tm) => pauseTimer(tm, t));
+    setNow(t);
+  };
+  // Fine per timer: l'audio si spegne e la sessione si chiude.
+  const finish = () => {
+    setRunning(false);
+    setTimer((tm) => finishTimer(tm));
   };
 
+  // Cambiare preset non tocca il timer; se l'audio è fermo, il tocco avvia l'ascolto.
   const choosePreset = (p) => {
     setPresetId(p.id);
     if (!playing) start();
   };
 
+  // Una nuova durata sostituisce il residuo; "No" lo disattiva senza fermare l'audio.
   const changeTimer = (m) => {
-    setTimerMin(m);
-    setEndAt(m && playing ? Date.now() + m * 60000 : 0);
-    if (!m) setRemaining("");
+    const t = Date.now();
+    setTimer((tm) => setTimerDuration(tm, m, t, playing));
+    setNow(t);
   };
 
   const closeSheet = useCallback(() => setSheetOpen(false), []);
 
-  // conto alla rovescia dello spegnimento automatico
+  // conto alla rovescia: aggiorna il display e chiude la sessione alla scadenza
   useEffect(() => {
-    if (!endAt || !playing) return;
-    const id = setInterval(() => {
-      const ms = endAt - Date.now();
-      if (ms <= 0) {
-        stop();
-        return;
-      }
-      const s = Math.ceil(ms / 1000);
-      setRemaining(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
-    }, 500);
+    if (timer.endAt == null) return;
+    const tick = () => {
+      const t = Date.now();
+      if (timerExpired(timer, t)) finish();
+      else setNow(t);
+    };
+    tick();
+    const id = setInterval(tick, 500);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endAt, playing]);
+  }, [timer]);
+
+  const remainingMs = timerRemaining(timer, now);
+  const remaining = formatRemaining(remainingMs);
+  const timerPaused = remainingMs != null && timer.endAt == null;
 
   const info = describe(settings);
 
@@ -147,7 +164,7 @@ export default function App() {
       subtitle: info.big !== "—" ? `${info.band} · ${info.big}` : info.small,
       playing,
       onPlay: start,
-      onPause: stop,
+      onPause: pause,
     });
   });
 
@@ -171,14 +188,14 @@ export default function App() {
           </span>
           <span className="hz">
             <span>{info.big}</span>
-            <small>{remaining ? `si spegne tra ${remaining}` : info.small}</small>
+            <small>{remaining ? (timerPaused ? `in pausa · restano ${remaining}` : `si spegne tra ${remaining}`) : info.small}</small>
           </span>
         </span>
       </button>
 
       <div className="controls">
-        <button type="button" className={`play${playing ? " on" : ""}`} onClick={playing ? stop : start}>
-          {playing ? "❚❚ Pausa" : "▶ Avvia"}
+        <button type="button" className={`play${playing ? " on" : ""}`} onClick={playing ? pause : start}>
+          {playing ? "❚❚ Pausa" : timerPaused ? "▶ Riprendi" : "▶ Avvia"}
         </button>
         <button type="button" className="adjust" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -242,9 +259,10 @@ export default function App() {
         onReset={resetPreset}
         volume={volume}
         onVolume={setVolume}
-        timerMin={timerMin}
+        timerMin={timer.durationMin}
         onTimer={changeTimer}
         remaining={remaining}
+        timerPaused={timerPaused}
       />
     </main>
   );

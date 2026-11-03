@@ -76,7 +76,7 @@ function SoundControls({ kind, s, set }) {
 
 export default function AdjustSheet({
   open, onClose, kind, settings, onSet, modified, onReset,
-  volume, onVolume, timerMin, onTimer, remaining,
+  volume, onVolume, timerMin, onTimer, remaining, timerPaused,
 }) {
   const sheetRef = useRef(null);
   const layerRef = useRef(null);
@@ -144,7 +144,11 @@ export default function AdjustSheet({
           <Section title="Generale">
             <Slider id="vol" label="Volume" value={volume} min={0} max={100} unit="%" onChange={onVolume} />
             <Pills label="Spegni dopo" options={timerOptions} value={timerMin} onChange={onTimer} />
-            {remaining && <p className="field-hint">Si spegne tra {remaining}</p>}
+            {remaining && (
+              <p className="field-hint">
+                {timerPaused ? `In pausa: restano ${remaining}` : `Si spegne tra ${remaining}`}
+              </p>
+            )}
           </Section>
 
           <p className="note">
