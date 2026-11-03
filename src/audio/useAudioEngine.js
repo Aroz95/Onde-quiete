@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { makeNatureBuffer } from "./natureSounds.js";
 import { enablePlaybackSession, startKeepAlive, stopKeepAlive } from "./background.js";
 import { initialPlayback, playbackReducer } from "./playbackState.js";
+import { createSlot, switchSource } from "./crossfade.js";
 
 // oltre questo tempo un resume() senza risposta conta come fallito
 const RESUME_TIMEOUT_MS = 4000;
@@ -34,11 +35,6 @@ function makeNoiseBuffer(ctx, type) {
   return buf;
 }
 
-/**
- * Motore audio: due oscillatori sinusoidali in stereo (battimento binaurale)
- * più un rumore colorato e un suono della natura in loop.
- * I parametri cambiano con transizioni morbide.
- */
 function applyParams(n, { beat, car, tone, noise, nature }) {
   const t = n.ctx.currentTime;
   n.oscL.frequency.setTargetAtTime(car, t, 0.3);
@@ -48,6 +44,12 @@ function applyParams(n, { beat, car, tone, noise, nature }) {
   n.natureGain.gain.setTargetAtTime((nature / 100) * 0.8, t, 0.4);
 }
 
+/**
+ * Motore audio: due oscillatori sinusoidali in stereo (battimento binaurale)
+ * più un rumore colorato e un suono della natura in loop.
+ * Frequenze e volumi cambiano con transizioni morbide; il cambio di tipo di rumore
+ * o di suono della natura usa una dissolvenza incrociata (crossfade.js).
+ */
 export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natureType, volume }) {
   const nodes = useRef(null);
   const wakeLock = useRef(null);
@@ -57,37 +59,22 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
   const params = useRef({});
   params.current = { beat, car, tone, noise, nature, volume };
 
-  const startNoise = useCallback((type) => {
+  // i buffer sono costosi da generare: li teniamo in cache per tipo
+  const bufferFor = (n, kind, type) => {
+    const cache = kind === "noise" ? n.noiseCache : n.natureCache;
+    if (!(type in cache)) cache[type] = kind === "noise" ? makeNoiseBuffer(n.ctx, type) : makeNatureBuffer(n.ctx, type);
+    return cache[type];
+  };
+
+  // `fade: false` al primo avvio; poi ogni cambio sfuma dal suono vecchio al nuovo
+  const startNoise = useCallback((type, fade = true) => {
     const n = nodes.current;
-    if (!n) return;
-    if (n.noiseSrc) {
-      try { n.noiseSrc.stop(); } catch { /* già fermo */ }
-    }
-    const src = n.ctx.createBufferSource();
-    src.buffer = makeNoiseBuffer(n.ctx, type);
-    src.loop = true;
-    src.connect(n.noiseGain);
-    src.start();
-    n.noiseSrc = src;
+    if (n) switchSource(n.noiseSlot, bufferFor(n, "noise", type), { fade });
   }, []);
 
-  // i buffer della natura sono costosi da generare: li teniamo in cache per tipo
-  const startNature = useCallback((type) => {
+  const startNature = useCallback((type, fade = true) => {
     const n = nodes.current;
-    if (!n) return;
-    if (n.natureSrc) {
-      try { n.natureSrc.stop(); } catch { /* già fermo */ }
-      n.natureSrc = null;
-    }
-    if (!n.natureCache[type]) n.natureCache[type] = makeNatureBuffer(n.ctx, type);
-    const buffer = n.natureCache[type];
-    if (!buffer) return;
-    const src = n.ctx.createBufferSource();
-    src.buffer = buffer;
-    src.loop = true;
-    src.connect(n.natureGain);
-    src.start();
-    n.natureSrc = src;
+    if (n) switchSource(n.natureSlot, bufferFor(n, "nature", type), { fade });
   }, []);
 
   const build = useCallback(() => {
@@ -124,11 +111,12 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
 
     nodes.current = {
       ctx, master, analyser, toneGain, noiseGain, natureGain, oscL, oscR,
-      noiseSrc: null, noiseType, natureSrc: null, natureType, natureCache: {},
+      noiseSlot: createSlot(ctx, noiseGain), natureSlot: createSlot(ctx, natureGain),
+      noiseType, natureType, noiseCache: {}, natureCache: {},
     };
     applyParams(nodes.current, params.current);
-    startNoise(noiseType);
-    startNature(natureType);
+    startNoise(noiseType, false);
+    startNature(natureType, false);
   }, [noiseType, natureType, startNoise, startNature]);
 
   // aggiorna frequenze e volumi
