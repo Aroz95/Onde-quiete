@@ -62,6 +62,15 @@ export function timerExpired(t, now) {
   return t.endAt != null && now >= t.endAt;
 }
 
+/**
+ * La sessione è finita: scaduta mentre scorreva, oppure congelata con residuo zero
+ * (es. il sistema ha interrotto l'audio dopo la scadenza, a pagina sospesa).
+ * Una sessione finita va chiusa, mai ripresa.
+ */
+export function timerOver(t, now) {
+  return timerExpired(t, now) || (t.endAt == null && t.remainingMs === 0);
+}
+
 export function formatRemaining(ms) {
   if (ms == null) return "";
   const s = Math.ceil(ms / 1000);

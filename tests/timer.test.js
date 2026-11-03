@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   createTimer, resumeTimer, pauseTimer, setTimerDuration, finishTimer,
-  timerRemaining, timerExpired, formatRemaining,
+  timerRemaining, timerExpired, timerOver, formatRemaining,
 } from "../src/timer.js";
 
 const MIN = 60000;
@@ -97,6 +97,19 @@ test("il residuo non diventa mai negativo", () => {
   const t = resumeTimer(setTimerDuration(createTimer(), 10, 0, false), 0);
   assert.equal(timerRemaining(t, 99 * MIN), 0);
   assert.equal(pauseTimer(t, 99 * MIN).remainingMs, 0);
+});
+
+test("sessione finita: scaduta o congelata a zero, mai ripresa", () => {
+  let t = resumeTimer(setTimerDuration(createTimer(), 10, 0, false), 0);
+  assert.equal(timerOver(t, 9 * MIN), false);
+  assert.equal(timerOver(t, 10 * MIN), true);
+  // il sistema interrompe dopo la scadenza, a pagina sospesa: la pausa congela zero
+  t = pauseTimer(t, 12 * MIN);
+  assert.equal(timerOver(t, 30 * MIN), true);
+  // una pausa normale non è una sessione finita
+  const u = pauseTimer(resumeTimer(setTimerDuration(createTimer(), 10, 0, false), 0), 3 * MIN);
+  assert.equal(timerOver(u, 99 * MIN), false);
+  assert.equal(timerOver(createTimer(), 0), false);
 });
 
 test("formato del conto alla rovescia", () => {

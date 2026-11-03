@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRESETS, PRESET_GROUPS, NOISE_LABELS, NATURE_LABELS, bandOf, presetSubtitle, kindOf } from "./presets.js";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { playButton, playbackMessage } from "./audio/playbackState.js";
@@ -9,7 +9,7 @@ import TabBar from "./components/TabBar.jsx";
 import AdjustSheet from "./components/AdjustSheet.jsx";
 import {
   createTimer, resumeTimer, pauseTimer, setTimerDuration, finishTimer,
-  timerRemaining, timerExpired, formatRemaining,
+  timerRemaining, timerOver, formatRemaining,
 } from "./timer.js";
 
 const TABS = [
@@ -76,7 +76,21 @@ export default function App() {
   useEffect(() => save(STORE.preset, presetId), [presetId]);
   useEffect(() => save(STORE.volume, volume), [volume]);
 
-  const engine = useAudioEngine({ ...settings, volume });
+  // copia sempre aggiornata del timer, per i controlli fatti da eventi esterni a React
+  const timerRef = useRef(timer);
+  timerRef.current = timer;
+  const finishRef = useRef(null);
+
+  // Prima di ogni ripresa automatica (ritorno in primo piano, fine di un'interruzione):
+  // una sessione scaduta mentre la pagina era sospesa si chiude e non riparte.
+  const beforeAutoResume = () => {
+    if (timerOver(timerRef.current, Date.now())) {
+      finishRef.current?.();
+      return false;
+    }
+    return true;
+  };
+  const engine = useAudioEngine({ ...settings, volume }, { beforeAutoResume });
   const { playback } = engine;
   // "playing" significa che l'audio suona davvero, non solo che è stato richiesto
   const playing = playback.status === "playing";
@@ -116,14 +130,28 @@ export default function App() {
     setTimer((tm) => finishTimer(tm));
     engine.finish();
   };
+  finishRef.current = finish;
 
   // il timer scorre solo mentre l'audio suona davvero: si ferma in pausa,
   // in avvio non riuscito e durante le interruzioni di sistema
   useEffect(() => {
     const t = Date.now();
+    // un'interruzione arrivata dopo la scadenza chiude la sessione invece di congelarla
+    if (!playing && timerOver(timerRef.current, t)) {
+      finish();
+      return;
+    }
     setTimer((tm) => (playing ? resumeTimer(tm, t) : pauseTimer(tm, t)));
     setNow(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
+
+  // la scadenza viene scritta anche nel clock audio: la dissolvenza finale avviene
+  // in orario pure con lo schermo bloccato, quando il JavaScript è rallentato
+  useEffect(() => {
+    engine.setSessionEnd(timer.endAt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timer.endAt]);
 
   // Cambiare preset non tocca il timer; se l'audio è fermo, il tocco avvia l'ascolto.
   const choosePreset = (p) => {
@@ -145,12 +173,17 @@ export default function App() {
     if (timer.endAt == null) return;
     const tick = () => {
       const t = Date.now();
-      if (timerExpired(timer, t)) finish();
+      if (timerOver(timer, t)) finish();
       else setNow(t);
     };
     tick();
     const id = setInterval(tick, 500);
-    return () => clearInterval(id);
+    // al ritorno in primo piano si riconcilia subito, senza aspettare l'intervallo
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer]);
 

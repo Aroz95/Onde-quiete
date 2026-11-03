@@ -3,9 +3,12 @@ import { makeNatureBuffer } from "./natureSounds.js";
 import { enablePlaybackSession, startKeepAlive, stopKeepAlive } from "./background.js";
 import { initialPlayback, playbackReducer } from "./playbackState.js";
 import { createSlot, switchSource } from "./crossfade.js";
+import { scheduleMaster, wallToAudio, FINAL_FADE_S } from "./masterSchedule.js";
 
 // oltre questo tempo un resume() senza risposta conta come fallito
 const RESUME_TIMEOUT_MS = 4000;
+// dopo una pausa o la fine, il contesto audio viene sospeso per risparmiare batteria
+const SUSPEND_AFTER_MS = 1500;
 
 function makeNoiseBuffer(ctx, type) {
   const len = ctx.sampleRate * 6;
@@ -50,7 +53,7 @@ function applyParams(n, { beat, car, tone, noise, nature }) {
  * Frequenze e volumi cambiano con transizioni morbide; il cambio di tipo di rumore
  * o di suono della natura usa una dissolvenza incrociata (crossfade.js).
  */
-export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natureType, volume }) {
+export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natureType, volume }, { beforeAutoResume } = {}) {
   const nodes = useRef(null);
   const wakeLock = useRef(null);
   const [playback, dispatch] = useReducer(playbackReducer, initialPlayback);
@@ -58,6 +61,9 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
   const tokenRef = useRef(0); // numero dell'ultima richiesta play/pausa
   const params = useRef({});
   params.current = { beat, car, tone, noise, nature, volume };
+  // chiamata prima di ogni ripresa automatica: se restituisce false (es. timer scaduto), non si riprende
+  const beforeAutoResumeRef = useRef(beforeAutoResume);
+  beforeAutoResumeRef.current = beforeAutoResume;
 
   // i buffer sono costosi da generare: li teniamo in cache per tipo
   const bufferFor = (n, kind, type) => {
@@ -113,6 +119,7 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
       ctx, master, analyser, toneGain, noiseGain, natureGain, oscL, oscR,
       noiseSlot: createSlot(ctx, noiseGain), natureSlot: createSlot(ctx, natureGain),
       noiseType, natureType, noiseCache: {}, natureCache: {},
+      endAudio: null, // scadenza del timer nel clock audio
     };
     applyParams(nodes.current, params.current);
     startNoise(noiseType, false);
@@ -124,7 +131,7 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     if (nodes.current) applyParams(nodes.current, params.current);
     if (nodes.current && intentRef.current === "play") {
       const n = nodes.current;
-      n.master.gain.setTargetAtTime(volume / 100, n.ctx.currentTime, 0.2);
+      scheduleMaster(n.master.gain, n.ctx.currentTime, volume / 100, n.endAudio);
     }
   }, [beat, car, tone, noise, nature, volume]);
 
@@ -145,8 +152,23 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
   }, [noiseType, startNoise]);
 
   const releaseWakeLock = async () => {
-    try { await wakeLock.current?.release(); } catch { /* ignora */ }
+    const lock = wakeLock.current;
     wakeLock.current = null;
+    try { await lock?.release(); } catch { /* ignora */ }
+  };
+
+  // Tiene acceso lo schermo solo mentre l'audio suona davvero e la pagina è visibile.
+  // Il sistema lo rilascia da solo quando la pagina si nasconde: l'evento "release" lo segnala.
+  const acquireWakeLock = async () => {
+    const n = nodes.current;
+    if (wakeLock.current || !navigator.wakeLock || document.visibilityState !== "visible") return;
+    if (!n || n.ctx.state !== "running" || intentRef.current !== "play") return;
+    try {
+      const lock = await navigator.wakeLock.request("screen");
+      if (intentRef.current !== "play") { lock.release().catch(() => {}); return; }
+      wakeLock.current = lock;
+      lock.addEventListener?.("release", () => { if (wakeLock.current === lock) wakeLock.current = null; });
+    } catch { /* non consentito o non supportato */ }
   };
 
   // Avvio o ripresa. Lo stato diventa "playing" solo se il contesto audio sta davvero suonando.
@@ -177,14 +199,10 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
       dispatch({ type: "PLAY_FAIL", token, reason: "blocked" });
       return false;
     }
-    const t = n.ctx.currentTime;
-    n.master.gain.cancelScheduledValues(t);
-    n.master.gain.setTargetAtTime(params.current.volume / 100, t, 0.6);
+    scheduleMaster(n.master.gain, n.ctx.currentTime, params.current.volume / 100, n.endAudio, 0.6);
     startKeepAlive();
     dispatch({ type: "PLAY_OK", token });
-    try { wakeLock.current = await navigator.wakeLock?.request("screen"); } catch { /* non disponibile */ }
-    // pausa arrivata mentre si attendeva il blocco schermo
-    if (token !== tokenRef.current) await releaseWakeLock();
+    await acquireWakeLock();
     return true;
   }, [build]);
 
@@ -195,9 +213,12 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     dispatch({ type, token });
     const n = nodes.current;
     if (n) {
-      const t = n.ctx.currentTime;
-      n.master.gain.cancelScheduledValues(t);
-      n.master.gain.setTargetAtTime(0, t, 0.25);
+      n.endAudio = null;
+      scheduleMaster(n.master.gain, n.ctx.currentTime, 0, null, 0.25);
+      // a dissolvenza finita il contesto si sospende, se nel frattempo non si è ripreso
+      setTimeout(() => {
+        if (tokenRef.current === token && n.ctx.state === "running") n.ctx.suspend().catch(() => {});
+      }, SUSPEND_AFTER_MS);
     }
     stopKeepAlive();
     await releaseWakeLock();
@@ -206,34 +227,51 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
   const pause = useCallback(() => halt("REQUEST_PAUSE"), [halt]);
   const finish = useCallback(() => halt("FINISH"), [halt]);
 
+  // Scadenza del timer (millisecondi di orologio, oppure null): viene scritta nel clock audio,
+  // così la dissolvenza finale avviene in orario anche con il JavaScript rallentato.
+  const setSessionEnd = useCallback((endAtMs) => {
+    const n = nodes.current;
+    if (!n) return;
+    n.endAudio = endAtMs == null ? null : wallToAudio(endAtMs, Date.now(), n.ctx.currentTime);
+    if (intentRef.current === "play" && n.ctx.state === "running") {
+      scheduleMaster(n.master.gain, n.ctx.currentTime, params.current.volume / 100, n.endAudio);
+    }
+  }, []);
+
   // dopo una telefonata, un allarme o il ritorno in primo piano iOS può lasciare
   // il contesto "interrupted" o "suspended": se l'utente vuole ascoltare, si tenta la ripresa.
   // L'esito arriva da onstatechange; se serve un tocco, lo stato resta "interrupted".
   useEffect(() => {
+    let busy = false;
     const revive = async () => {
       const n = nodes.current;
-      if (!n || intentRef.current !== "play" || n.ctx.state === "running") return;
-      try { await n.ctx.resume(); } catch { /* serve un tocco dell'utente */ }
-      if (intentRef.current !== "play") return;
-      startKeepAlive();
-      if (document.visibilityState === "visible" && !wakeLock.current) {
-        try { wakeLock.current = await navigator.wakeLock?.request("screen"); } catch { /* ignora */ }
+      if (!n || intentRef.current !== "play" || busy) return;
+      // prima di tutto: una sessione scaduta mentre la pagina era sospesa non deve ripartire
+      if (beforeAutoResumeRef.current && beforeAutoResumeRef.current() === false) return;
+      busy = true;
+      try {
+        if (n.ctx.state !== "running") {
+          try { await n.ctx.resume(); } catch { /* serve un tocco: lo stato resta "interrupted" */ }
+          if (intentRef.current !== "play") return;
+          if (n.ctx.state === "running") startKeepAlive();
+        }
+        // anche se l'audio non si era mai fermato, il blocco schermo va riacquisito
+        await acquireWakeLock();
+      } finally {
+        busy = false;
       }
     };
-    const onVisible = () => {
-      // il blocco schermo viene rilasciato quando la pagina si nasconde
-      if (document.visibilityState === "hidden") wakeLock.current = null;
-      revive();
-    };
-    document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("visibilitychange", revive);
     window.addEventListener("pageshow", revive);
     window.addEventListener("focus", revive);
-    const timer = setInterval(revive, 3000);
+    // controllo periodico di riserva: in background i timer sono rallentati, ma quando
+    // girano riconciliano scadenza e stato
+    const id = setInterval(revive, 3000);
     return () => {
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", revive);
       window.removeEventListener("pageshow", revive);
       window.removeEventListener("focus", revive);
-      clearInterval(timer);
+      clearInterval(id);
     };
   }, []);
 
@@ -244,5 +282,5 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     stopKeepAlive();
   }, []);
 
-  return { playback, play, pause, finish };
+  return { playback, play, pause, finish, setSessionEnd, finalFadeSeconds: FINAL_FADE_S };
 }
