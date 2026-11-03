@@ -84,6 +84,17 @@ select { background: var(--panel); color: var(--fg); border: 1px solid var(--lin
 .note { font-size: 0.8rem; color: var(--muted); margin: 0; }
 .note b { color: var(--warn); font-weight: 500; }
 
+.update {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border-radius: 14px; border: 1px solid var(--accent2);
+  background: color-mix(in srgb, var(--accent2) 12%, var(--panel)); font-size: 0.9rem;
+}
+.update button {
+  border: 0; border-radius: 999px; padding: 8px 16px; background: var(--accent2); color: #15112b;
+  font-family: var(--display); font-weight: 600; cursor: pointer;
+}
+.update button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
 @media (max-width: 420px) {
   .grid, .grid4 { grid-template-columns: repeat(2, 1fr); }
   .row { grid-template-columns: 80px 1fr 56px; }

@@ -6,6 +6,7 @@ import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { updateMediaSession } from "./audio/background.js";
 import Scope from "./components/Scope.jsx";
 import Slider from "./components/Slider.jsx";
+import UpdateBanner from "./components/UpdateBanner.jsx";
 
 const CUSTOM_COLOR = "#7fd1c4";
 
@@ -87,6 +88,7 @@ export default function App() {
 
   return (
     <main className="wrap">
+      <UpdateBanner />
       <header>
         <h1>Onde Quiete</h1>
         <span className="hint">🎧 usa le cuffie</span>
