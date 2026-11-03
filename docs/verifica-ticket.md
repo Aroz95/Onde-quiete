@@ -91,6 +91,19 @@ Per i comportamenti di iOS (schermo bloccato, interruzioni, sessione audio) l'em
 | Rotazione, altezza e densità dei pixel senza deformazioni | ✅ 390↔844 px, altezza, 1×→3× | ⏳ rotazione reale |
 | La grafica non tocca l'audio | ✅ audio attivo con onda ferma o pagina nascosta | — |
 
+## OQ-10 Qualità sonora, loop e prestazioni
+
+Dettagli in [report-audio.md](report-audio.md).
+
+| Criterio | Misura | Dispositivo / ascolto |
+|---|---|---|
+| Report con anomalie riproducibili | ✅ 6 anomalie, script in `tools/misure-audio` | ⏳ ascolto |
+| Nessun click alle giunzioni | ✅ tutti gli 8 loop sotto il 99,9° percentile (prima: marrone 6,3×) | ⏳ ascolto |
+| Livelli del mix complessivo | ✅ escursione da 9,0 a 3,4 dB, nessuna saturazione | ⏳ ascolto |
+| Picchi di temporale e camino | ✅ camino picco/medio da 19,4 a 15,3 dB | ⏳ ascolto |
+| Reattività alla prima selezione | ✅ nessun blocco a CPU normale, 126 ms a 4× | ⏳ iPhone |
+| Correzioni circoscritte con prima/dopo | ✅ tabella nel report | — |
+
 ## Da fare per il rilascio
 
 1. Prove su iPhone (Safari e app nella Home) della [checklist](collaudo-dispositivi.md), in particolare:

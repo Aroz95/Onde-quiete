@@ -38,6 +38,8 @@ export function playbackReducer(s, a) {
       // eventi del sistema audio: contano solo se l'utente vuole ascoltare
       if (s.intent !== "play" || s.status === "starting") return s;
       if (a.state === "running") return { ...s, status: "playing", reason: null };
+      // già interrotto: si conserva il motivo originale (es. avvio rifiutato dal browser)
+      if (s.status === "interrupted") return s;
       return { ...s, status: "interrupted", reason: "system" };
     case "RESET":
       return initialPlayback;

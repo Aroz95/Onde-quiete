@@ -1,15 +1,21 @@
 // Suoni della natura sintetizzati: nessun file audio, tutto generato al volo.
 // Ogni buffer dura LOOP_SECONDS (o il valore in LOOP_OVERRIDE) e si ripete
 // con una dissolvenza incrociata per evitare click.
+//
+// I generatori sono "function*": cedono il controllo ogni YIELD_EVERY campioni, così
+// la generazione può avvenire a blocchi senza bloccare l'interfaccia (OQ-10).
+
+import { YIELD_EVERY, foldLoop, softLimit, runSync, runAsync } from "./bufferTools.js";
 
 const LOOP_SECONDS = 20;
 const LOOP_OVERRIDE = { storm: 45 }; // loop più lungo, così i tuoni non sembrano ripetersi
 const FADE_SECONDS = 0.08;
 
-function rainChannel(sr, n, { dropsPerSec = 140, bed = 0.35 } = {}) {
+function* rainChannel(sr, n, { dropsPerSec = 140, bed = 0.35 } = {}) {
   const out = new Float32Array(n);
   let lp = 0, soft = 0, drop = 0, dropDecay = 0.99;
   for (let i = 0; i < n; i++) {
+    if ((i & (YIELD_EVERY - 1)) === 0) yield;
     const w = Math.random() * 2 - 1;
     // fruscio: rumore bianco passa-alto e poi ammorbidito
     lp += 0.08 * (w - lp);
@@ -35,15 +41,16 @@ const THUNDERS = [
   { at: 40, dur: 3.5, amp: 0.35, crack: 0, pan: -0.6 },
 ];
 
-function stormChannel(sr, n, ch) {
+function* stormChannel(sr, n, ch) {
   // pioggia più fitta e più piena
-  const out = rainChannel(sr, n, { dropsPerSec: 320, bed: 0.55 });
+  const out = yield* rainChannel(sr, n, { dropsPerSec: 320, bed: 0.55 });
   for (const th of THUNDERS) {
     const start = Math.floor(th.at * sr);
     const end = Math.min(n, Math.floor((th.at + th.dur) * sr));
     const side = ch === 0 ? 1 - th.pan * 0.6 : 1 + th.pan * 0.6;
     let r1 = 0, r2 = 0, r3 = 0;
     for (let i = start; i < end; i++) {
+      if ((i & (YIELD_EVERY - 1)) === 0) yield;
       const w = Math.random() * 2 - 1;
       // rimbombo: rumore filtrato molto in basso, più un po' di medi per la "voce" del tuono
       r1 += 0.012 * (w - r1);
@@ -60,15 +67,19 @@ function stormChannel(sr, n, ch) {
     }
   }
   // compressione morbida: i picchi dei tuoni non devono abbassare tutta la pioggia
-  for (let i = 0; i < n; i++) out[i] = Math.tanh(out[i] * 0.9);
+  for (let i = 0; i < n; i++) {
+    if ((i & (YIELD_EVERY - 1)) === 0) yield;
+    out[i] = Math.tanh(out[i] * 0.9);
+  }
   return out;
 }
 
-function wavesChannel(sr, n, offset) {
+function* wavesChannel(sr, n, offset) {
   const out = new Float32Array(n);
   const period = sr * 10; // un'onda ogni 10 secondi
   let brown = 0, foam = 0;
   for (let i = 0; i < n; i++) {
+    if ((i & (YIELD_EVERY - 1)) === 0) yield;
     const w = Math.random() * 2 - 1;
     const frac = ((i + offset * sr) / period) % 1;
     // l'onda sale lentamente, si infrange e si ritira
@@ -81,10 +92,11 @@ function wavesChannel(sr, n, offset) {
   return out;
 }
 
-function windChannel(sr, n, phase) {
+function* windChannel(sr, n, phase) {
   const out = new Float32Array(n);
   let y1 = 0, y2 = 0;
   for (let i = 0; i < n; i++) {
+    if ((i & (YIELD_EVERY - 1)) === 0) yield;
     const w = Math.random() * 2 - 1;
     const t = i / n; // cicli interi nella durata del loop, così si ripete senza salti
     const gust = 0.5 + 0.3 * Math.sin(2 * Math.PI * (2 * t + phase)) + 0.2 * Math.sin(2 * Math.PI * (5 * t + phase * 2));
@@ -96,10 +108,11 @@ function windChannel(sr, n, phase) {
   return out;
 }
 
-function fireChannel(sr, n) {
+function* fireChannel(sr, n) {
   const out = new Float32Array(n);
   let rumble = 0, hiss = 0, pop = 0, popDecay = 0.99, burst = 0;
   for (let i = 0; i < n; i++) {
+    if ((i & (YIELD_EVERY - 1)) === 0) yield;
     const w = Math.random() * 2 - 1;
     rumble = (rumble + 0.02 * w) / 1.02;
     hiss += 0.3 * (w - hiss);
@@ -129,27 +142,52 @@ const GENERATORS = {
   storm: (sr, n, ch) => stormChannel(sr, n, ch),
 };
 
-export function makeNatureBuffer(ctx, type) {
+// Correzione di livello per tipo, misurata con loudness pesata K (ITU-R BS.1770)
+// rispetto al mediano di tutti i preset. Senza correzione onde, vento e camino
+// risultavano 6,5–7 dB più bassi degli altri suoni.
+export const NATURE_TRIM_DB = { rain: 0, waves: 6.5, wind: 6.5, fire: 7, storm: 0 };
+
+function* natureBufferSteps(ctx, type) {
   const gen = GENERATORS[type];
   if (!gen) return null;
   const sr = ctx.sampleRate;
   const len = Math.floor(sr * (LOOP_OVERRIDE[type] ?? LOOP_SECONDS));
   const fade = Math.floor(sr * FADE_SECONDS);
-  const buf = ctx.createBuffer(2, len, sr);
+  const chans = [];
   let peak = 0;
   for (let ch = 0; ch < 2; ch++) {
-    const raw = gen(sr, len + fade, ch);
-    const d = buf.getChannelData(ch);
+    const raw = yield* gen(sr, len + fade, ch);
+    // chiusura del loop e ricerca del picco, anche loro a blocchi
+    const d = new Float32Array(len);
+    foldLoop(raw, len, fade, d);
+    yield;
     for (let i = 0; i < len; i++) {
-      d[i] = i < fade ? raw[i] * (i / fade) + raw[len + i] * (1 - i / fade) : raw[i];
+      if ((i & (YIELD_EVERY - 1)) === 0) yield;
       const a = Math.abs(d[i]);
       if (a > peak) peak = a;
     }
+    chans.push(d);
   }
-  const k = peak ? 0.7 / peak : 1;
+  // picco a 0,7, poi la correzione di livello; il limitatore arrotonda ciò che supera 0,7
+  const k = (peak ? 0.7 / peak : 1) * 10 ** ((NATURE_TRIM_DB[type] || 0) / 20);
+  const buf = ctx.createBuffer(2, len, sr);
   for (let ch = 0; ch < 2; ch++) {
-    const d = buf.getChannelData(ch);
-    for (let i = 0; i < len; i++) d[i] *= k;
+    const d = chans[ch];
+    for (let i = 0; i < len; i++) {
+      if ((i & (YIELD_EVERY - 1)) === 0) yield;
+      d[i] = softLimit(d[i] * k);
+    }
+    buf.copyToChannel(d, ch);
   }
   return buf;
+}
+
+/** Genera il buffer tutto subito (test e misure). */
+export function makeNatureBuffer(ctx, type) {
+  return runSync(natureBufferSteps(ctx, type));
+}
+
+/** Genera il buffer a piccoli blocchi, senza bloccare l'interfaccia. */
+export function makeNatureBufferAsync(ctx, type) {
+  return runAsync(natureBufferSteps(ctx, type));
 }

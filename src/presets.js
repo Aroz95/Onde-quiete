@@ -15,7 +15,7 @@ export const PRESET_GROUPS = [
       { ...base, id: "energy", name: "Energia", beat: 40, car: 300, tone: 50, noise: 10, noiseType: "white", color: "#f0d36b" },
       { ...base, id: "study", name: "Studio", beat: 14, car: 220, tone: 35, noise: 30, noiseType: "pink", nature: 30, natureType: "rain", color: "#9fd69a" },
       { ...base, id: "calm", name: "Calma", beat: 8, car: 136, tone: 55, noise: 30, noiseType: "brown", color: "#8fc7e8" },
-      { ...base, id: "noise", name: "Solo rumore", beat: 10, car: 200, tone: 0, noise: 70, noiseType: "brown", color: "#9aa4b2" },
+      { ...base, id: "noise", name: "Solo rumore", beat: 10, car: 200, tone: 0, noise: 100, noiseType: "brown", color: "#9aa4b2" },
     ],
   },
   {

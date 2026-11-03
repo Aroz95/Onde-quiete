@@ -51,6 +51,14 @@ test("primo avvio senza dissolvenza, cambio successivo con dissolvenza", () => {
   assert.ok(Math.abs(first.src.stopAt - (5 + CROSSFADE_S + 0.05)) < 1e-9);
 });
 
+test("suono arrivato in ritardo: entra in dissolvenza anche se prima non c'era nulla", () => {
+  const ctx = fakeCtx();
+  const slot = createSlot(ctx, {});
+  switchSource(slot, buf, { fade: true });
+  assert.equal(slot.current.inGain.gain.value, 0);
+  assert.equal(slot.current.inGain.gain.curves.length, 1);
+});
+
 test("a fine dissolvenza la sorgente precedente viene fermata e scollegata", () => {
   const ctx = fakeCtx();
   const slot = createSlot(ctx, {});

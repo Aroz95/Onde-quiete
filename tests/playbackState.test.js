@@ -59,6 +59,13 @@ test("interruzione di sistema e ripresa automatica", () => {
   assert.equal(s.status, "playing");
 });
 
+test("dopo un avvio rifiutato, un evento di sistema non cambia il motivo del messaggio", () => {
+  let s = run({ type: "REQUEST_PLAY", token: 1 }, { type: "PLAY_FAIL", token: 1, reason: "blocked" });
+  s = r(s, { type: "CONTEXT_STATE", state: "suspended" });
+  assert.equal(s.reason, "blocked");
+  assert.match(playbackMessage(s), /browser/);
+});
+
 test("la pausa dell'utente non viene annullata dal sistema", () => {
   let s = run({ type: "REQUEST_PLAY", token: 1 }, { type: "PLAY_OK", token: 1 }, { type: "REQUEST_PAUSE", token: 2 });
   s = r(s, { type: "CONTEXT_STATE", state: "running" });

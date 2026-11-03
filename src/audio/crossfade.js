@@ -45,8 +45,9 @@ function fadeOut(slot, layer, at, fade) {
 
 /**
  * Sostituisce la sorgente del posto con un nuovo buffer in loop (o la toglie con `null`).
- * Con `fade: false` il cambio è immediato: si usa al primo avvio, quando il volume
- * generale sta già salendo da zero.
+ * Con `fade: true` il nuovo suono entra in dissolvenza, anche se prima il posto era vuoto
+ * (es. un suono della natura pronto solo dopo l'avvio). Con `fade: false` il cambio è
+ * immediato: si usa al primo avvio, quando il volume generale sta già salendo da zero.
  */
 export function switchSource(slot, buffer, { fade = true } = {}) {
   const { ctx } = slot;
@@ -60,7 +61,7 @@ export function switchSource(slot, buffer, { fade = true } = {}) {
     src.loop = true;
     const inGain = ctx.createGain();
     const outGain = ctx.createGain();
-    if (fade && old) {
+    if (fade) {
       inGain.gain.value = 0; // valore di partenza, poi la curva
       inGain.gain.setValueCurveAtTime(fadeCurve("in"), at, CROSSFADE_S);
     }

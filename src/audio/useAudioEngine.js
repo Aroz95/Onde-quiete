@@ -1,51 +1,18 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { makeNatureBuffer } from "./natureSounds.js";
+import { makeNatureBufferAsync } from "./natureSounds.js";
+import { makeNoiseBuffer } from "./noiseSounds.js";
+import { createGraph, applyParams } from "./graph.js";
 import { enablePlaybackSession, startKeepAlive, stopKeepAlive } from "./background.js";
 import { initialPlayback, playbackReducer } from "./playbackState.js";
-import { createSlot, switchSource } from "./crossfade.js";
+import { switchSource } from "./crossfade.js";
 import { scheduleMaster, wallToAudio, FINAL_FADE_S } from "./masterSchedule.js";
 
 // oltre questo tempo un resume() senza risposta conta come fallito
 const RESUME_TIMEOUT_MS = 4000;
 // dopo una pausa o la fine, il contesto audio viene sospeso per risparmiare batteria
 const SUSPEND_AFTER_MS = 1500;
-
-function makeNoiseBuffer(ctx, type) {
-  const len = ctx.sampleRate * 6;
-  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let ch = 0; ch < 2; ch++) {
-    const d = buf.getChannelData(ch);
-    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0;
-    for (let i = 0; i < len; i++) {
-      const w = Math.random() * 2 - 1;
-      if (type === "white") {
-        d[i] = w * 0.5;
-      } else if (type === "pink") {
-        b0 = 0.99886 * b0 + w * 0.0555179;
-        b1 = 0.99332 * b1 + w * 0.0750759;
-        b2 = 0.969 * b2 + w * 0.153852;
-        b3 = 0.8665 * b3 + w * 0.3104856;
-        b4 = 0.55 * b4 + w * 0.5329522;
-        b5 = -0.7616 * b5 - w * 0.016898;
-        d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
-        b6 = w * 0.115926;
-      } else {
-        last = (last + 0.02 * w) / 1.02;
-        d[i] = last * 3.5;
-      }
-    }
-  }
-  return buf;
-}
-
-function applyParams(n, { beat, car, tone, noise, nature }) {
-  const t = n.ctx.currentTime;
-  n.oscL.frequency.setTargetAtTime(car, t, 0.3);
-  n.oscR.frequency.setTargetAtTime(car + beat, t, 0.3);
-  n.toneGain.gain.setTargetAtTime((tone / 100) * 0.35, t, 0.3);
-  n.noiseGain.gain.setTargetAtTime((noise / 100) * 0.5, t, 0.3);
-  n.natureGain.gain.setTargetAtTime((nature / 100) * 0.8, t, 0.4);
-}
+// quanti suoni della natura tenere in memoria (circa 8 MB ciascuno, 17 MB il temporale)
+const NATURE_CACHE_SIZE = 3;
 
 /**
  * Motore audio: due oscillatori sinusoidali in stereo (battimento binaurale)
@@ -65,22 +32,45 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
   const beforeAutoResumeRef = useRef(beforeAutoResume);
   beforeAutoResumeRef.current = beforeAutoResume;
 
-  // i buffer sono costosi da generare: li teniamo in cache per tipo
-  const bufferFor = (n, kind, type) => {
-    const cache = kind === "noise" ? n.noiseCache : n.natureCache;
-    if (!(type in cache)) cache[type] = kind === "noise" ? makeNoiseBuffer(n.ctx, type) : makeNatureBuffer(n.ctx, type);
-    return cache[type];
-  };
-
-  // `fade: false` al primo avvio; poi ogni cambio sfuma dal suono vecchio al nuovo
+  // Rumori: buffer piccoli e rapidi da generare (circa 20 ms), in cache per tipo.
+  // `fade: false` al primo avvio; poi ogni cambio sfuma dal suono vecchio al nuovo.
   const startNoise = useCallback((type, fade = true) => {
     const n = nodes.current;
-    if (n) switchSource(n.noiseSlot, bufferFor(n, "noise", type), { fade });
+    if (!n) return;
+    if (!(type in n.noiseCache)) n.noiseCache[type] = makeNoiseBuffer(n.ctx, type);
+    switchSource(n.noiseSlot, n.noiseCache[type], { fade });
   }, []);
 
+  // Natura: buffer grandi (fino a 17 MB e mezzo secondo di calcolo per il temporale).
+  // Si generano a piccoli blocchi senza bloccare l'interfaccia; nel frattempo continua
+  // il suono precedente, poi il nuovo entra in dissolvenza. In memoria restano solo
+  // gli ultimi NATURE_CACHE_SIZE tipi usati.
   const startNature = useCallback((type, fade = true) => {
     const n = nodes.current;
-    if (n) switchSource(n.natureSlot, bufferFor(n, "nature", type), { fade });
+    if (!n) return;
+    const cache = n.natureCache;
+    if (cache.has(type)) {
+      const buf = cache.get(type);
+      cache.delete(type); cache.set(type, buf); // segna come usato di recente
+      switchSource(n.natureSlot, buf, { fade });
+      return;
+    }
+    if (!n.natureLoading.has(type)) {
+      n.natureLoading.set(type, makeNatureBufferAsync(n.ctx, type).then((buf) => {
+        n.natureLoading.delete(type);
+        cache.set(type, buf);
+        while (cache.size > NATURE_CACHE_SIZE) {
+          const oldest = cache.keys().next().value;
+          if (oldest === n.natureType) break; // mai togliere quello in ascolto
+          cache.delete(oldest);
+        }
+        return buf;
+      }));
+    }
+    n.natureLoading.get(type).then((buf) => {
+      // nel frattempo l'utente può aver scelto un altro suono: si usa solo l'ultimo
+      if (nodes.current === n && n.natureType === type) switchSource(n.natureSlot, buf, { fade: true });
+    }).catch(() => { n.natureLoading.delete(type); });
   }, []);
 
   const build = useCallback(() => {
@@ -89,36 +79,10 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     const ctx = new Ctx();
     // sospensioni e interruzioni decise dal sistema (telefonate, altre app, Siri)
     ctx.onstatechange = () => dispatch({ type: "CONTEXT_STATE", state: ctx.state });
-    const master = ctx.createGain();
-    master.gain.value = 0;
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    master.connect(analyser);
-    analyser.connect(ctx.destination);
-
-    const toneGain = ctx.createGain();
-    const noiseGain = ctx.createGain();
-    const natureGain = ctx.createGain();
-    toneGain.connect(master);
-    noiseGain.connect(master);
-    natureGain.connect(master);
-
-    const panL = ctx.createStereoPanner();
-    const panR = ctx.createStereoPanner();
-    panL.pan.value = -1;
-    panR.pan.value = 1;
-    const oscL = ctx.createOscillator();
-    const oscR = ctx.createOscillator();
-    oscL.type = oscR.type = "sine";
-    oscL.connect(panL).connect(toneGain);
-    oscR.connect(panR).connect(toneGain);
-    oscL.start();
-    oscR.start();
-
+    const graph = createGraph(ctx, ctx.destination);
     nodes.current = {
-      ctx, master, analyser, toneGain, noiseGain, natureGain, oscL, oscR,
-      noiseSlot: createSlot(ctx, noiseGain), natureSlot: createSlot(ctx, natureGain),
-      noiseType, natureType, noiseCache: {}, natureCache: {},
+      ...graph,
+      noiseType, natureType, noiseCache: {}, natureCache: new Map(), natureLoading: new Map(),
       endAudio: null, // scadenza del timer nel clock audio
     };
     applyParams(nodes.current, params.current);
