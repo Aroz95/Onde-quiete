@@ -1,0 +1,128 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+function makeNoiseBuffer(ctx, type) {
+  const len = ctx.sampleRate * 6;
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, last = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      if (type === "white") {
+        d[i] = w * 0.5;
+      } else if (type === "pink") {
+        b0 = 0.99886 * b0 + w * 0.0555179;
+        b1 = 0.99332 * b1 + w * 0.0750759;
+        b2 = 0.969 * b2 + w * 0.153852;
+        b3 = 0.8665 * b3 + w * 0.3104856;
+        b4 = 0.55 * b4 + w * 0.5329522;
+        b5 = -0.7616 * b5 - w * 0.016898;
+        d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+        b6 = w * 0.115926;
+      } else {
+        last = (last + 0.02 * w) / 1.02;
+        d[i] = last * 3.5;
+      }
+    }
+  }
+  return buf;
+}
+
+/**
+ * Motore audio: due oscillatori sinusoidali in stereo (battimento binaurale)
+ * più un rumore colorato in loop. I parametri cambiano con transizioni morbide.
+ */
+export function useAudioEngine({ beat, car, tone, noise, noiseType, volume }) {
+  const nodes = useRef(null);
+  const wakeLock = useRef(null);
+  const [playing, setPlaying] = useState(false);
+
+  const startNoise = useCallback((type) => {
+    const n = nodes.current;
+    if (!n) return;
+    if (n.noiseSrc) {
+      try { n.noiseSrc.stop(); } catch { /* già fermo */ }
+    }
+    const src = n.ctx.createBufferSource();
+    src.buffer = makeNoiseBuffer(n.ctx, type);
+    src.loop = true;
+    src.connect(n.noiseGain);
+    src.start();
+    n.noiseSrc = src;
+  }, []);
+
+  const build = useCallback(() => {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const master = ctx.createGain();
+    master.gain.value = 0;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    master.connect(analyser);
+    analyser.connect(ctx.destination);
+
+    const toneGain = ctx.createGain();
+    const noiseGain = ctx.createGain();
+    toneGain.connect(master);
+    noiseGain.connect(master);
+
+    const panL = ctx.createStereoPanner();
+    const panR = ctx.createStereoPanner();
+    panL.pan.value = -1;
+    panR.pan.value = 1;
+    const oscL = ctx.createOscillator();
+    const oscR = ctx.createOscillator();
+    oscL.type = oscR.type = "sine";
+    oscL.connect(panL).connect(toneGain);
+    oscR.connect(panR).connect(toneGain);
+    oscL.start();
+    oscR.start();
+
+    nodes.current = { ctx, master, analyser, toneGain, noiseGain, oscL, oscR, noiseSrc: null, noiseType };
+    startNoise(noiseType);
+  }, [noiseType, startNoise]);
+
+  // aggiorna frequenze e volumi
+  useEffect(() => {
+    const n = nodes.current;
+    if (!n) return;
+    const t = n.ctx.currentTime;
+    n.oscL.frequency.setTargetAtTime(car, t, 0.3);
+    n.oscR.frequency.setTargetAtTime(car + beat, t, 0.3);
+    n.toneGain.gain.setTargetAtTime((tone / 100) * 0.35, t, 0.3);
+    n.noiseGain.gain.setTargetAtTime((noise / 100) * 0.5, t, 0.3);
+    if (playing) n.master.gain.setTargetAtTime(volume / 100, t, 0.2);
+  }, [beat, car, tone, noise, volume, playing]);
+
+  // cambia tipo di rumore
+  useEffect(() => {
+    const n = nodes.current;
+    if (!n || n.noiseType === noiseType) return;
+    n.noiseType = noiseType;
+    startNoise(noiseType);
+  }, [noiseType, startNoise]);
+
+  const setRunning = useCallback(async (on) => {
+    if (!nodes.current) build();
+    const n = nodes.current;
+    if (n.ctx.state === "suspended") await n.ctx.resume();
+    const t = n.ctx.currentTime;
+    n.master.gain.cancelScheduledValues(t);
+    n.master.gain.setTargetAtTime(on ? volume / 100 : 0, t, on ? 0.6 : 0.25);
+    setPlaying(on);
+    if (on) {
+      try { wakeLock.current = await navigator.wakeLock?.request("screen"); } catch { /* non disponibile */ }
+    } else {
+      try { await wakeLock.current?.release(); } catch { /* ignora */ }
+      wakeLock.current = null;
+    }
+  }, [build, volume]);
+
+  // chiude il contesto audio quando il componente viene smontato
+  useEffect(() => () => {
+    nodes.current?.ctx.close();
+    wakeLock.current?.release?.();
+  }, []);
+
+  return { playing, setRunning, getAnalyser: () => nodes.current?.analyser ?? null };
+}
