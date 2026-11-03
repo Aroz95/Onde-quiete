@@ -3,6 +3,7 @@ import {
   PRESETS, PRESET_GROUPS, NOISE_LABELS, NATURE_LABELS, TIMER_OPTIONS, bandOf, presetSubtitle,
 } from "./presets.js";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
+import { updateMediaSession } from "./audio/background.js";
 import Scope from "./components/Scope.jsx";
 import Slider from "./components/Slider.jsx";
 
@@ -72,6 +73,17 @@ export default function App() {
   }, [endAt, playing]);
 
   const info = describe(settings);
+
+  // titolo e pulsanti play/pausa nella schermata di blocco
+  useEffect(() => {
+    updateMediaSession({
+      title: settings.name,
+      subtitle: info.big !== "—" ? `${info.band} · ${info.big}` : info.small,
+      playing,
+      onPlay: start,
+      onPause: stop,
+    });
+  });
 
   return (
     <main className="wrap">
@@ -165,7 +177,8 @@ export default function App() {
       <p className="note">
         I battimenti binaurali funzionano solo in cuffia: ogni orecchio riceve una frequenza diversa e il cervello
         percepisce la differenza. Con battimento a 0 Hz senti un tono puro. Le ricerche sui benefici danno risultati
-        contrastanti: usala come sottofondo, non come terapia. Tieni il volume basso. <b>Non usarla alla guida.</b>
+        contrastanti: usala come sottofondo, non come terapia. Su iPhone l'ascolto a schermo bloccato richiede iOS 17.5
+        o successivo. Tieni il volume basso. <b>Non usarla alla guida.</b>
       </p>
     </main>
   );

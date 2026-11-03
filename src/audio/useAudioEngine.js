@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { makeNatureBuffer } from "./natureSounds.js";
+import { enablePlaybackSession, startKeepAlive, stopKeepAlive } from "./background.js";
 
 function makeNoiseBuffer(ctx, type) {
   const len = ctx.sampleRate * 6;
@@ -38,6 +39,7 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
   const nodes = useRef(null);
   const wakeLock = useRef(null);
   const [playing, setPlaying] = useState(false);
+  const playingRef = useRef(false);
 
   const startNoise = useCallback((type) => {
     const n = nodes.current;
@@ -139,25 +141,62 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
   }, [noiseType, startNoise]);
 
   const setRunning = useCallback(async (on) => {
+    // va impostata prima di creare o riprendere il contesto audio
+    if (on) enablePlaybackSession();
     if (!nodes.current) build();
     const n = nodes.current;
-    if (n.ctx.state === "suspended") await n.ctx.resume();
+    if (n.ctx.state !== "running") {
+      try { await n.ctx.resume(); } catch { /* riprova al prossimo tocco */ }
+    }
     const t = n.ctx.currentTime;
     n.master.gain.cancelScheduledValues(t);
     n.master.gain.setTargetAtTime(on ? volume / 100 : 0, t, on ? 0.6 : 0.25);
+    playingRef.current = on;
     setPlaying(on);
     if (on) {
+      startKeepAlive();
       try { wakeLock.current = await navigator.wakeLock?.request("screen"); } catch { /* non disponibile */ }
     } else {
+      stopKeepAlive();
       try { await wakeLock.current?.release(); } catch { /* ignora */ }
       wakeLock.current = null;
     }
   }, [build, volume]);
 
+  // dopo una telefonata, un allarme o il ritorno in primo piano iOS può lasciare
+  // il contesto "interrupted" o "suspended": se l'utente stava ascoltando, riprendiamo
+  useEffect(() => {
+    const revive = async () => {
+      const n = nodes.current;
+      if (!n || !playingRef.current || n.ctx.state === "running") return;
+      try { await n.ctx.resume(); } catch { /* serve un tocco dell'utente */ }
+      startKeepAlive();
+      if (document.visibilityState === "visible" && !wakeLock.current) {
+        try { wakeLock.current = await navigator.wakeLock?.request("screen"); } catch { /* ignora */ }
+      }
+    };
+    const onVisible = () => {
+      // il blocco schermo viene rilasciato quando la pagina si nasconde
+      if (document.visibilityState === "hidden") wakeLock.current = null;
+      revive();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", revive);
+    window.addEventListener("focus", revive);
+    const timer = setInterval(revive, 3000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", revive);
+      window.removeEventListener("focus", revive);
+      clearInterval(timer);
+    };
+  }, []);
+
   // chiude il contesto audio quando il componente viene smontato
   useEffect(() => () => {
     nodes.current?.ctx.close();
     wakeLock.current?.release?.();
+    stopKeepAlive();
   }, []);
 
   return { playing, setRunning, getAnalyser: () => nodes.current?.analyser ?? null };
