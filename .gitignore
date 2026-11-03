@@ -4,3 +4,4 @@ dist
 *.log
 tools/misure-audio/bundle.js
 tests/browser/.build/
+tools/misure-audio/bundle-pioggia.js

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { makeNatureBufferAsync } from "./natureSounds.js";
 import { makeNoiseBuffer } from "./noiseSounds.js";
 import { createGraph, applyParams } from "./graph.js";
@@ -6,6 +6,7 @@ import { enablePlaybackSession, startKeepAlive, stopKeepAlive } from "./backgrou
 import { initialPlayback, playbackReducer } from "./playbackState.js";
 import { switchSource } from "./crossfade.js";
 import { scheduleMaster, wallToAudio, FINAL_FADE_S } from "./masterSchedule.js";
+import { createEnvironment, hasEnvironmentEngine } from "./env/index.js";
 
 // oltre questo tempo un resume() senza risposta conta come fallito
 const RESUME_TIMEOUT_MS = 4000;
@@ -20,7 +21,7 @@ const NATURE_CACHE_SIZE = 3;
  * Frequenze e volumi cambiano con transizioni morbide; il cambio di tipo di rumore
  * o di suono della natura usa una dissolvenza incrociata (crossfade.js).
  */
-export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natureType, volume }, { beforeAutoResume } = {}) {
+export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natureType, volume, env = null }, { beforeAutoResume } = {}) {
   const nodes = useRef(null);
   const wakeLock = useRef(null);
   const [playback, dispatch] = useReducer(playbackReducer, initialPlayback);
@@ -31,6 +32,28 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
   // chiamata prima di ogni ripresa automatica: se restituisce false (es. timer scaduto), non si riprende
   const beforeAutoResumeRef = useRef(beforeAutoResume);
   beforeAutoResumeRef.current = beforeAutoResume;
+  // ambiente naturale attivo ({ id, config }) e stato di preparazione delle sue componenti
+  const envRef = useRef(env);
+  envRef.current = env;
+  const [envStatus, setEnvStatus] = useState({});
+
+  // L'ambiente richiesto prende il posto di quello attuale: stessa scena → si aggiornano
+  // solo i parametri cambiati; scena diversa → la vecchia sfuma e rilascia le sue sorgenti.
+  const syncEnv = useCallback(() => {
+    const n = nodes.current;
+    if (!n) return;
+    const want = envRef.current;
+    const have = n.env;
+    if (want && have && have.id === want.id) { have.update(want.config); return; }
+    if (have) have.dispose();
+    n.env = null;
+    setEnvStatus({});
+    if (!want || !hasEnvironmentEngine(want.id)) return;
+    n.env = createEnvironment(want.id, n.ctx, n.envBus, want.config, {
+      onStatus: (st) => { if (nodes.current?.env?.id === want.id) setEnvStatus(st); },
+    });
+    if (intentRef.current === "play" && n.ctx.state === "running") { n.env.setActive(true); n.env.topUp(); }
+  }, []);
 
   // Rumori: buffer piccoli e rapidi da generare (circa 20 ms), in cache per tipo.
   // `fade: false` al primo avvio; poi ogni cambio sfuma dal suono vecchio al nuovo.
@@ -87,8 +110,13 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     };
     applyParams(nodes.current, params.current);
     startNoise(noiseType, false);
-    startNature(natureType, false);
-  }, [noiseType, natureType, startNoise, startNature]);
+    // lo strato natura dei preset si prepara solo se quel preset lo usa davvero
+    if (params.current.nature > 0) startNature(natureType, false);
+    syncEnv();
+  }, [noiseType, natureType, startNoise, startNature, syncEnv]);
+
+  // ambiente cambiato: scena o parametri
+  useEffect(() => { syncEnv(); }, [env?.id, env?.config, syncEnv]);
 
   // aggiorna frequenze e volumi
   useEffect(() => {
@@ -99,13 +127,14 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     }
   }, [beat, car, tone, noise, nature, volume]);
 
-  // cambia suono della natura
+  // cambia suono della natura (o diventa udibile per la prima volta)
   useEffect(() => {
     const n = nodes.current;
-    if (!n || n.natureType === natureType) return;
+    if (!n || nature <= 0) return;
+    if (n.natureType === natureType && (n.natureSlot.current || n.natureLoading.has(natureType))) return;
     n.natureType = natureType;
     startNature(natureType);
-  }, [natureType, startNature]);
+  }, [natureType, nature, startNature]);
 
   // cambia tipo di rumore
   useEffect(() => {
@@ -165,6 +194,9 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     }
     scheduleMaster(n.master.gain, n.ctx.currentTime, params.current.volume / 100, n.endAudio, 0.6);
     startKeepAlive();
+    // tuoni e raffiche ripartono da adesso, senza recuperare quelli della pausa
+    n.env?.setActive(true);
+    n.env?.topUp();
     dispatch({ type: "PLAY_OK", token });
     await acquireWakeLock();
     return true;
@@ -178,6 +210,8 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     const n = nodes.current;
     if (n) {
       n.endAudio = null;
+      // gli eventi futuri dell'ambiente si annullano; quelli in corso sfumano con il volume generale
+      n.env?.setActive(false);
       scheduleMaster(n.master.gain, n.ctx.currentTime, 0, null, 0.25);
       // a dissolvenza finita il contesto si sospende, se nel frattempo non si è ripreso
       setTimeout(() => {
@@ -221,6 +255,8 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
         }
         // anche se l'audio non si era mai fermato, il blocco schermo va riacquisito
         await acquireWakeLock();
+        // la pianificazione di tuoni e raffiche si estende fino all'orizzonte
+        if (n.ctx.state === "running" && intentRef.current === "play") n.env?.topUp();
       } finally {
         busy = false;
       }
@@ -241,10 +277,13 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
 
   // chiude il contesto audio quando il componente viene smontato
   useEffect(() => () => {
+    nodes.current?.env?.dispose(0.1);
     nodes.current?.ctx.close();
     wakeLock.current?.release?.();
     stopKeepAlive();
   }, []);
 
-  return { playback, play, pause, finish, setSessionEnd, finalFadeSeconds: FINAL_FADE_S };
+  const retryEnv = useCallback((cid) => nodes.current?.env?.retry(cid), []);
+
+  return { playback, play, pause, finish, setSessionEnd, finalFadeSeconds: FINAL_FADE_S, envStatus, retryEnv };
 }

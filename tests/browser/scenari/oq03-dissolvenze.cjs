@@ -15,6 +15,8 @@ module.exports = async function (browser, r) {
   const { page: p, errors } = await openApp(browser, { init });
   await p.click(sel.play); await p.waitForTimeout(1500); // natura e rumore del primo preset pronti
   await p.click(".adjust"); await p.waitForTimeout(400);
+  // in Relax la natura di fondo è a zero e non viene nemmeno preparata: la si alza
+  await p.fill("#nature", "40"); await p.waitForTimeout(1500);
   for (const c of ["Marrone", "Bianco", "Rosa", "Marrone", "Bianco"]) { await p.click(`.pill:has-text('${c}')`); await p.waitForTimeout(80); }
   for (const c of ["Onde", "Vento", "Camino", "Pioggia", "Onde"]) { await p.click(`.pill:has-text('${c}')`); await p.waitForTimeout(80); }
   await p.click(".text-btn.strong");

@@ -1,0 +1,44 @@
+// NAT-02, NAT-06: comportamento audio del motore degli ambienti, misurato sul segnale in uscita.
+const { buildTestPage } = require("../lib.cjs");
+
+module.exports = async function (browser, r) {
+  const url = buildTestPage("motore");
+  const p = await browser.newPage();
+  const errors = [];
+  p.on("pageerror", (e) => errors.push(e.message));
+  await p.goto(url);
+  const run = (name) => p.evaluate((n) => window.prove[n](), name);
+
+  const f = await run("frequenza");
+  r.info(`tuoni in 4 minuti: rari ${f.rari}, frequenti ${f.frequenti}`);
+  r.check(f.frequenti > f.rari * 3, "più frequenza, più tuoni nel tempo");
+
+  const s = await run("spegnimento");
+  r.info(`tuoni spenti nel pieno di un tuono: ${s.livelloPrima} dB → ${s.livelloDopo1s} dB dopo 1 s → ${s.livelloDopo} dB dopo`);
+  r.check(s.livelloDopo1s < s.livelloPrima - 15, "spegnendo i tuoni durante una coda, la coda sfuma in breve");
+  r.check(s.nuoviEventiDopo === 0 && s.livelloDopo < -80, "dopo lo spegnimento non arrivano nuovi tuoni");
+
+  const pa = await run("pausa");
+  r.info(`pausa di 120 s: eventi in pausa ${pa.eventiInPausa}, nei primi 10 s dopo la ripresa ${pa.eventiNeiPrimi10sDopoLaRipresa}, primo dopo ${pa.primoDopoRipresa} s`);
+  r.check(pa.eventiInPausa === 0 && pa.livelloInPausa < -100, `in pausa nessun tuono suona (livello ${pa.livelloInPausa} dB)`);
+  r.check(pa.eventiNeiPrimi10sDopoLaRipresa <= 1, "alla ripresa nessun tuono arretrato riprodotto in gruppo");
+
+  const t = await run("tardivo");
+  r.check(t.sorgentiAvviate === 0 && t.livello < -100, `ambiente abbandonato durante la preparazione: il caricamento tardivo non lo riattiva (${t.sorgentiAvviate} sorgenti)`);
+
+  const ft = await run("fineTimer");
+  r.info(`fine timer durante un temporale: ${ft.prima} dB → ${ft.duranteDissolvenza} dB in dissolvenza → ${ft.allaScadenza} dB alla scadenza → ${ft.dopo} dB dopo`);
+  r.check(ft.duranteDissolvenza < ft.prima && ft.allaScadenza < ft.prima - 30 && ft.dopo < ft.prima - 40, "alla fine del timer tutto il mix (pioggia, tuoni, vento) sfuma insieme");
+
+  const tr = await run("transizione");
+  r.info(`intensità da leggera a battente dal vivo: ${tr.prima} → ${tr.dopo} dB, salto al cambio ${tr.saltoAlCambioSuP999}× il 99,9° percentile`);
+  r.check(tr.saltoAlCambioSuP999 < 1.5, "cambio di intensità dal vivo senza scatti");
+  r.check(Math.abs(tr.dopo - tr.prima) < 3, "da leggera a battente senza salto brusco di livello");
+
+  const so = await run("sorgenti");
+  r.info(`sorgenti attive dopo ogni cambio: ${so.attiveDopoOgniCambio}`);
+  r.check(so.finali <= 16, "accensioni e spegnimenti ripetuti: le sorgenti non si accumulano");
+
+  r.check(errors.length === 0, `nessun errore${errors.length ? ": " + errors[0] : ""}`);
+  await p.close();
+};

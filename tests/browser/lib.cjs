@@ -27,6 +27,21 @@ function buildApp() {
   );
 }
 
+/** Compila una pagina di prova (tests/browser/pagine/<nome>.js) e ne restituisce l'indirizzo. */
+function buildTestPage(name) {
+  const esbuild = require("esbuild");
+  fs.mkdirSync(BUILD_DIR, { recursive: true });
+  esbuild.buildSync({
+    entryPoints: [path.join(__dirname, "pagine", name + ".js")],
+    bundle: true,
+    outfile: path.join(BUILD_DIR, name + ".js"),
+    logLevel: "error",
+    nodePaths: (process.env.NODE_PATH || "").split(path.delimiter).filter(Boolean),
+  });
+  fs.writeFileSync(path.join(BUILD_DIR, name + ".html"), `<!doctype html><meta charset="utf-8"><script src="${name}.js"></script>`);
+  return "file://" + path.join(BUILD_DIR, name + ".html");
+}
+
 /** Raccoglie l'esito delle verifiche di uno scenario. */
 function createReport(name) {
   const results = [];
@@ -76,4 +91,4 @@ async function setTimer(page, minutes) {
 
 const text = (page, s) => page.evaluate((q) => document.querySelector(q)?.textContent.trim() ?? "", s);
 
-module.exports = { buildApp, createReport, openApp, setTimer, text, sel, MIN, PAGE };
+module.exports = { buildApp, buildTestPage, createReport, openApp, setTimer, text, sel, MIN, PAGE };

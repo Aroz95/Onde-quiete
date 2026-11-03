@@ -115,6 +115,40 @@ Dettagli in [report-audio.md](report-audio.md).
 | Test significativi per timer e stati | ✅ 50 test di unità e 86 verifiche nel browser; contro-prova con due difetti introdotti di proposito: rilevati entrambi (6 test e 11 verifiche falliti), poi ripristinati |
 | Evidenze di accessibilità, responsive e dispositivi | ✅ emulazione · ⏳ dispositivi |
 
+## CR Ambienti naturali — prima tappa: Pioggia
+
+Pioggia completa (NAT-01, NAT-02, NAT-03, NAT-05) da ascoltare e validare prima di estendere
+il modello a Mare, Vento e Camino (NAT-04). Scenari in `tests/browser/scenari/nat0*.cjs`,
+test di unità in `tests/environments.test.js` e `tests/scheduler.test.js`.
+
+| Criterio | Unità | Browser / misura | Dispositivo / ascolto |
+|---|---|---|---|
+| **NAT-01** Ogni ambiente ha una configurazione indipendente | ✅ | ✅ | — |
+| Dati assenti, parziali o non validi recuperati | ✅ | ✅ dati rovinati | — |
+| Temporale ricondotto a Pioggia | ✅ | ✅ | — |
+| Esigenze e Solfeggio non cambiano modificando Natura | ✅ | ✅ Studio | — |
+| Migrazione con Pioggia e Temporale entrambi personalizzati | ✅ precedenza al selezionato | ✅ | — |
+| **NAT-02** Attivazione e disattivazione senza stacchi | — | ✅ coda da −27,6 a −114 dB in 1 s | ⏳ ascolto |
+| Cambi rapidi senza accumulo né componenti obsolete | — | ✅ 10–15 sorgenti; caricamento tardivo ignorato | — |
+| Pausa, ripresa e fine timer su tutte le componenti | ✅ | ✅ | ⏳ iPhone |
+| Nessun evento arretrato alla ripresa | ✅ | ✅ dopo 120 s di pausa | — |
+| Mix più impegnativo senza saturazione, interfaccia reattiva | — | ✅ −0,4 dBFS, blocco massimo 79 ms | ⏳ iPhone |
+| **NAT-03** Leggera e battente diverse per carattere a livello simile | — | ✅ granularità 13,5 → 1,8 dB, loudness ±0,3 dB | ⏳ ascolto |
+| Tuoni e vento indipendenti | ✅ | ✅ | — |
+| Frequenza, distanza e livello dei tuoni distinti | ✅ | ✅ 3 → 19 tuoni; 87 → 351 Hz | ⏳ ascolto |
+| Burrasca non cambia pioggia né volume generale | ✅ | ✅ | — |
+| Leggera → temporale → leggera senza interrompere il timer | — | ✅ | ⏳ |
+| Configurazione ritrovata riaprendo l'app | — | ✅ | ⏳ |
+| **NAT-05** Dalla tessera ai controlli pertinenti | — | ✅ | — |
+| Componenti spente senza parametri, valori conservati | ✅ | ✅ | — |
+| Slider con componente e valore comprensibile | — | ✅ "Intensità, pioggia: Battente" | ⏳ VoiceOver |
+| Riepiloghi e "Personalizzato" seguono la configurazione | ✅ | ✅ | — |
+| Modifiche in pausa non avviano l'audio | — | ✅ | — |
+| Focus confinato, tastiera, ritorno del focus | — | ✅ | ⏳ VoiceOver |
+| 360 e 390 px senza scorrimento orizzontale, comandi raggiungibili | — | ✅ | ⏳ |
+| **NAT-04** Mare, Vento, Camino | — | — | da fare dopo la validazione della Pioggia |
+| **NAT-06** Ascolto 20 min per ambiente, collaudo iPhone | — | — | ⏳ |
+
 ## Riepilogo dello stato
 
 Tutti i criteri verificabili in emulazione sono soddisfatti. **Nessun criterio è ancora verificato

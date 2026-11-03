@@ -10,6 +10,9 @@ import TabBar from "./components/TabBar.jsx";
 import AdjustSheet from "./components/AdjustSheet.jsx";
 import QuickControls from "./components/QuickControls.jsx";
 import Icon, { presetIcon } from "./components/Icons.jsx";
+import { ENVIRONMENTS, defaultConfig, applyQuick, setParam, isCustomized, validateState } from "./environments/model.js";
+import { migrateLegacy, migratePresetId } from "./environments/migration.js";
+import { summarizeEnv, describeEnv } from "./environments/describe.js";
 import {
   createTimer, resumeTimer, pauseTimer, setTimerDuration, finishTimer,
   timerRemaining, timerOver, formatRemaining,
@@ -22,7 +25,12 @@ const TABS = [
 ];
 
 // chiavi usate per ricordare le scelte su questo dispositivo
-const STORE = { tab: "onde-quiete-tab", tweaks: "onde-quiete-tweaks", preset: "onde-quiete-preset", volume: "onde-quiete-volume" };
+const STORE = {
+  tab: "onde-quiete-tab", tweaks: "onde-quiete-tweaks", preset: "onde-quiete-preset", volume: "onde-quiete-volume",
+  envs: "onde-quiete-ambienti", // stato versionato degli ambienti naturali
+};
+// vecchi preset Natura che hanno già il nuovo motore a componenti
+const MIGRATED_LEGACY = ["rain", "storm"];
 const TWEAKABLE = ["beat", "car", "tone", "noise", "noiseType", "nature", "natureType"];
 
 function load(key, fallback) {
@@ -39,13 +47,34 @@ function save(key, value) {
 
 const merge = (preset, tweak) => ({ ...preset, ...(tweak || {}) });
 
+// Primo caricamento: preferenze salvate e, se serve, migrazione dei vecchi preset Natura.
+// Un dato mancante o rovinato non impedisce l'apertura: si torna ai valori predefiniti.
+function loadInitial() {
+  const tweaks = load(STORE.tweaks, {}) || {};
+  const savedPreset = load(STORE.preset, PRESETS[0].id);
+  const rawEnvs = load(STORE.envs, null);
+  let envState, rest = tweaks;
+  if (rawEnvs) {
+    envState = validateState(rawEnvs);
+    // dati della versione precedente rimasti accanto a quelli nuovi: si scartano
+    rest = { ...tweaks };
+    MIGRATED_LEGACY.forEach((id) => delete rest[id]);
+  } else {
+    const m = migrateLegacy(tweaks && typeof tweaks === "object" ? tweaks : {}, savedPreset, MIGRATED_LEGACY);
+    envState = m.state;
+    rest = m.tweaks;
+  }
+  const id = migratePresetId(savedPreset);
+  return { presetId: PRESETS.some((p) => p.id === id) ? id : PRESETS[0].id, tweaks: rest, envState };
+}
+
 export default function App() {
-  const [presetId, setPresetId] = useState(() => {
-    const id = load(STORE.preset, PRESETS[0].id);
-    return PRESETS.some((p) => p.id === id) ? id : PRESETS[0].id;
-  });
-  // modifiche dell'utente, separate per ogni preset: { relax: { beat: 9 }, rain: { nature: 60 } }
-  const [tweaks, setTweaks] = useState(() => load(STORE.tweaks, {}));
+  const [initial] = useState(loadInitial);
+  const [presetId, setPresetId] = useState(initial.presetId);
+  // modifiche dell'utente, separate per ogni preset: { relax: { beat: 9 } }
+  const [tweaks, setTweaks] = useState(initial.tweaks);
+  // ambienti naturali: una configurazione per ambiente, indipendente da Esigenze e Solfeggio
+  const [envState, setEnvState] = useState(initial.envState);
   const [volume, setVolume] = useState(() => load(STORE.volume, 70));
   const [timer, setTimer] = useState(() => createTimer(0));
   const [now, setNow] = useState(() => Date.now());
@@ -56,14 +85,24 @@ export default function App() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const preset = PRESETS.find((p) => p.id === presetId);
-  const settings = useMemo(() => merge(preset, tweaks[presetId]), [preset, tweaks, presetId]);
   const kind = kindOf(presetId);
-  const modified = Object.keys(tweaks[presetId] || {}).length > 0;
+  const envId = preset.env || null;
+  const envConfig = envId ? envState.envs[envId] : null;
+  const settings = useMemo(() => {
+    const base = merge(preset, tweaks[presetId]);
+    if (!envConfig) return base;
+    // per un ambiente il rumore colorato viene da "Altri sottofondi"
+    const n = envConfig.components.noise;
+    return { ...base, noise: n.on ? n.level : 0, noiseType: n.color };
+  }, [preset, tweaks, presetId, envConfig]);
+  const modified = envConfig ? isCustomized(envId, envConfig) : Object.keys(tweaks[presetId] || {}).length > 0;
+  const engineEnv = useMemo(() => (envConfig ? { id: envId, config: envConfig } : null), [envId, envConfig]);
   const currentTab = PRESET_GROUPS.find((g) => g.presets.some((p) => p.id === presetId))?.id;
 
   useEffect(() => save(STORE.tweaks, tweaks), [tweaks]);
   useEffect(() => save(STORE.preset, presetId), [presetId]);
   useEffect(() => save(STORE.volume, volume), [volume]);
+  useEffect(() => save(STORE.envs, envState), [envState]);
 
   // copia sempre aggiornata del timer, per i controlli fatti da eventi esterni a React
   const timerRef = useRef(timer);
@@ -79,7 +118,7 @@ export default function App() {
     }
     return true;
   };
-  const engine = useAudioEngine({ ...settings, volume }, { beforeAutoResume });
+  const engine = useAudioEngine({ ...settings, volume, env: engineEnv }, { beforeAutoResume });
   const { playback } = engine;
   // "playing" significa che l'audio suona davvero, non solo che è stato richiesto
   const playing = playback.status === "playing";
@@ -103,12 +142,19 @@ export default function App() {
     });
   };
 
-  const resetPreset = () =>
+  const resetPreset = () => {
+    if (envId) { updateEnv(() => defaultConfig(envId)); return; }
     setTweaks((all) => {
       const next = { ...all };
       delete next[presetId];
       return next;
     });
+  };
+
+  // modifiche dell'ambiente: dal vivo durante l'ascolto, in pausa aggiornano solo la configurazione
+  const updateEnv = (fn) => setEnvState((st) => ({ ...st, envs: { ...st.envs, [envId]: fn(st.envs[envId]) } }));
+  const setEnvValue = (cid, key, value) => updateEnv((c) => setParam(envId, c, cid, key, value));
+  const chooseQuick = (qid) => updateEnv((c) => applyQuick(envId, c, qid));
 
   // Avvia o riprende. Il timer parte solo quando l'audio è confermato (vedi effetto più sotto).
   const start = () => engine.play();
@@ -182,9 +228,10 @@ export default function App() {
   const button = playButton(playback, remainingMs != null);
   const message = playbackMessage(playback);
 
-  const description = describeMix(settings);
-  const short = shortMix(settings);
-  const headphones = needsHeadphones(settings);
+  // per un ambiente i testi vengono dalla sua configurazione effettiva
+  const description = envConfig ? describeEnv(envId, envConfig) : describeMix(settings);
+  const short = envConfig ? summarizeEnv(envId, envConfig) : shortMix(settings);
+  const headphones = !envConfig && needsHeadphones(settings);
 
   // stato scritto (non solo colorato) del preset selezionato
   const stateWord = {
@@ -220,7 +267,7 @@ export default function App() {
             <span className="now-state">{stateWord}</span>
             <span className="mode">
               {settings.name}
-              {modified && <span className="badge">su misura</span>}
+              {modified && <span className="badge">{envConfig ? "personalizzato" : "su misura"}</span>}
             </span>
             <span className="now-desc">{short}</span>
           </span>
@@ -309,8 +356,17 @@ export default function App() {
                     )}
                   </span>
                   <b>{p.name}</b>
-                  <span className="chip-desc">{shortMix(shown)}</span>
-                  {tweaks[p.id] && <span className="chip-tag">su misura</span>}
+                  {p.env ? (
+                    <>
+                      <span className="chip-desc">{summarizeEnv(p.env, envState.envs[p.env])}</span>
+                      {isCustomized(p.env, envState.envs[p.env]) && <span className="chip-tag">personalizzato</span>}
+                    </>
+                  ) : (
+                    <>
+                      <span className="chip-desc">{shortMix(shown)}</span>
+                      {tweaks[p.id] && <span className="chip-tag">su misura</span>}
+                    </>
+                  )}
                   {!active && <span className="sr-only">, tocca per ascoltare</span>}
                 </button>
               );
@@ -340,6 +396,16 @@ export default function App() {
         onSet={setValue}
         modified={modified}
         onReset={resetPreset}
+        env={envConfig ? {
+          id: envId,
+          config: envConfig,
+          title: `Personalizza ${ENVIRONMENTS[envId].name}`,
+          summary: description,
+          onSet: setEnvValue,
+          onQuick: chooseQuick,
+          status: engine.envStatus,
+          onRetry: engine.retryEnv,
+        } : null}
       />
     </main>
   );

@@ -15,7 +15,8 @@ l'ascolto un tocco su un altro suono passa a quello senza interrompere il timer.
 |---|---|---|
 | **Esigenze** | Relax, Concentrazione, Sonno, Meditazione, Creatività, Energia, Studio, Calma | battimento binaurale con rumore e, in alcuni, natura di fondo |
 | | Solo rumore | rumore marrone |
-| **Natura** | Pioggia, Onde del mare, Vento, Camino, Temporale | suono della natura con eventuale rumore di fondo |
+| **Natura** | Pioggia | ambiente personalizzabile: pioggia, tuoni, vento e raffiche (vedi sotto) |
+| | Onde del mare, Vento, Camino | suono della natura con eventuale rumore di fondo (diventeranno ambienti personalizzabili) |
 | **Solfeggio** | 396, 432, 528, 639 Hz | tono puro con un leggero sottofondo naturale |
 
 Ogni tessera mostra una descrizione breve generata dal mix attivo (es. "Tono calmo · Rumore rosa");
@@ -24,6 +25,31 @@ la descrizione completa è nel pannello Regola. Le descrizioni dicono com'è il 
 **Cuffie.** Il battimento binaurale nasce da un suono leggermente diverso in ciascun orecchio:
 senza cuffie non si percepisce, e l'app lo indica con "Usa le cuffie". Gli altri suoni funzionano
 anche dagli altoparlanti ("Cuffie consigliate").
+
+## Ambiente Pioggia
+
+La Pioggia non è un suono fisso: è un ambiente fatto di componenti regolabili dal vivo,
+durante l'ascolto o in pausa, senza interrompere la sessione né il timer.
+
+| Componente | Controlli | Cosa cambia |
+|---|---|---|
+| Pioggia | intensità (Leggera → Moderata → Intensa → Battente), livello | densità e trama delle gocce, corpo del fondo d'acqua; il volume resta circa lo stesso |
+| Tuoni (facoltativi) | frequenza (Rari → Frequenti), distanza (Lontani → Vicini), livello | quanti tuoni arrivano; lontani gravi e lenti, vicini più chiari con lo schiocco |
+| Vento (facoltativo) | forza (Brezza → Burrasca), raffiche (Rare → Frequenti), livello | corpo e ululato del vento, frequenza delle raffiche |
+| Altri sottofondi | rumore colorato: colore e livello | — |
+
+**Configurazioni rapide:** Pioggia leggera, Pioggia intensa e Temporale. Sono scorciatoie che
+impostano più controlli insieme; dopo ogni parametro resta modificabile e la tessera mostra
+"personalizzato". Una componente spenta nasconde i suoi controlli ma ne conserva i valori.
+
+Tuoni e raffiche arrivano a intervalli variabili e sono programmati in anticipo nel clock audio
+(90 s per i tuoni, 60 s per le raffiche): continuano anche se il JavaScript della pagina è rallentato.
+In pausa quelli futuri si annullano; alla ripresa si riparte da adesso, senza recuperi in gruppo.
+Se la pagina resta sospesa più a lungo dell'orizzonte, pioggia e vento continuano ma i nuovi tuoni
+e raffiche aspettano che la pagina torni attiva.
+
+Il vecchio preset Temporale è ora la configurazione rapida Temporale della Pioggia; le personalizzazioni
+salvate sono state trasferite (vedi `src/environments/migration.js`).
 
 ## Cosa si regola
 
@@ -41,7 +67,8 @@ dal volume generale.
 |---|---|
 | Esigenze binaurali | battimento (0,5–40 Hz), portante (80–500 Hz), livello dell'onda; colore e livello del rumore di fondo; suono e livello della natura di fondo |
 | Solo rumore | colore e livello del rumore; suono e livello della natura di fondo |
-| Natura | intensità; colore e livello del rumore di fondo |
+| Pioggia | vedi la sezione "Ambiente Pioggia" |
+| Onde del mare, Vento, Camino | intensità; colore e livello del rumore di fondo |
 | Solfeggio | livello del tono; suono e livello del sottofondo naturale |
 
 Le modifiche valgono **solo per il preset su cui si fanno**: il preset mostra "su misura" e
@@ -66,7 +93,9 @@ il pulsante mostra "Riprendi" con un breve messaggio. Le regolazioni restano.
 ## Cosa viene salvato
 
 Solo su questo dispositivo e in questo browser (memoria locale), nessun account:
-regolazioni di ogni preset, ultimo preset scelto, volume generale, ultima scheda aperta.
+regolazioni di ogni preset, configurazione di ogni ambiente naturale (con versione di schema e
+validazione: un dato rovinato torna ai valori predefiniti), ultimo preset scelto, volume generale,
+ultima scheda aperta. Le regolazioni della Natura sono separate da quelle di Esigenze e Solfeggio.
 Il timer non viene salvato.
 
 ## Ascolto in background
@@ -136,6 +165,7 @@ src/
   presets.js                 preset e bande di frequenza
   mixDescription.js          descrizioni a parole del mix attivo
   timer.js                   logica del timer (pausa, ripresa, scadenza)
+  environments/              modello degli ambienti, migrazione, riepiloghi
   audio/
     useAudioEngine.js        motore audio: avvio, pausa, ripresa, background
     graph.js                 grafo Web Audio (oscillatori, rumore, natura, volumi)
@@ -146,6 +176,7 @@ src/
     noiseSounds.js           rumore rosa, marrone e bianco
     bufferTools.js           chiusura dei loop, limitatore, generazione a blocchi
     background.js            sessione audio, schermata di blocco
+    env/                     motore degli ambienti: pianificazione eventi, Pioggia
   components/                onda, pannello Regola, controlli rapidi, schede, icone
 tests/                       test di unità
 tests/browser/               prove nel browser

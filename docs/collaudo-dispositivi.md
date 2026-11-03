@@ -50,6 +50,12 @@ Compilare una colonna per dispositivo. Esito: ✅ funziona · ⚠️ funziona co
 | 15. Cambio tra suoni della natura e colori del rumore: nessuno stacco brusco | | | | | |
 | 16. Scorrendo fino in fondo, l'ultima tessera e la nota restano sopra la barra | | | | | |
 | 17. VoiceOver: pannello Regola letto come finestra, cursori con nome e valore | | | | — | |
+| 18. Pioggia: da leggera a battente durante l'ascolto, nessun salto di volume | | | | | |
+| 19. Pioggia: tuoni accesi a schermo bloccato per 10 min, continuano ad arrivare | | | | | |
+| 20. Pioggia: spegnere i tuoni durante un tuono, la coda sfuma | | | | | |
+| 21. Pioggia: timer durante un temporale, tutto sfuma insieme | | | | | |
+| 22. Pioggia: ascolto di 20 min per configurazione rapida, senza click né ripetizioni evidenti | | | | | |
+| 23. VoiceOver: interruttori di tuoni e vento letti con nome e stato | | | | — | |
 
 ### Come eseguire i passi
 

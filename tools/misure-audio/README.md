@@ -21,3 +21,14 @@ node tools/misure-audio/esegui.cjs
 ```
 
 I risultati del 3 novembre 2026 sono in [docs/report-audio.md](../../docs/report-audio.md).
+
+## Ambiente Pioggia
+
+`pioggia.js` misura l'ambiente Pioggia: carattere e loudness alle quattro intensità, tuoni lontani
+e vicini, brezza e burrasca, caso peggiore attraverso il grafo dell'app.
+
+```bash
+npx esbuild tools/misure-audio/pioggia.js --bundle --outfile=tools/misure-audio/bundle-pioggia.js
+node tools/misure-audio/pioggia.cjs                     # tutte le misure
+node tools/misure-audio/pioggia.cjs intensita,peggiore  # solo alcune
+```

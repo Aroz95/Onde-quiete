@@ -22,11 +22,12 @@ export const PRESET_GROUPS = [
     id: "nature",
     title: "Suoni della natura",
     presets: [
-      { id: "rain", name: "Pioggia", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "pink", nature: 80, natureType: "rain", color: "#7fb3d6" },
+      // ambiente personalizzabile: il suono viene dal motore degli ambienti (src/audio/env),
+      // tono e strato natura del preset restano spenti
+      { id: "rain", name: "Pioggia", env: "rain", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "pink", nature: 0, natureType: "rain", color: "#7fb3d6" },
       { id: "waves", name: "Onde del mare", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "brown", nature: 80, natureType: "waves", color: "#5fb8c9" },
       { id: "wind", name: "Vento", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "brown", nature: 75, natureType: "wind", color: "#c3cbd6" },
       { id: "fire", name: "Camino", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "brown", nature: 80, natureType: "fire", color: "#ef9f6a" },
-      { id: "storm", name: "Temporale", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "brown", nature: 80, natureType: "storm", color: "#8e9bd1" },
     ],
   },
   {
@@ -79,6 +80,7 @@ export function kindOf(presetId) {
   const group = PRESET_GROUPS.find((g) => g.presets.some((p) => p.id === presetId));
   const preset = PRESETS.find((p) => p.id === presetId);
   if (!group || !preset) return "binaural";
+  if (preset.env) return "env";
   if (group.id === "needs") return preset.tone > 0 ? "binaural" : "noise";
   return group.id; // "nature" o "solfeggio"
 }

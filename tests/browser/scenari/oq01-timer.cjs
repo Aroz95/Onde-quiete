@@ -23,7 +23,7 @@ module.exports = async function (browser, r) {
   await p.click(sel.tab("nature")); await p.click(sel.preset("Pioggia")); await p.clock.runFor(1000);
   r.check(/Si spegne tra 14:5\d/.test(await t()), "cambio di preset durante l'ascolto: timer invariato");
 
-  await p.click(".adjust"); await p.fill("#nature", "50"); await p.click(".text-btn.strong"); await p.clock.runFor(1000);
+  await p.click(".adjust"); await p.fill("#env-rain-level", "50"); await p.click(".text-btn.strong"); await p.clock.runFor(1000);
   r.check(/Si spegne tra 14:5\d/.test(await t()), "regolazione di un livello: timer invariato");
 
   await p.clock.fastForward(15 * MIN); await p.clock.runFor(1000);

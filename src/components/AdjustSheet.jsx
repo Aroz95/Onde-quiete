@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Slider from "./Slider.jsx";
 import Pills from "./Pills.jsx";
+import EnvControls from "./EnvControls.jsx";
 import { NOISE_LABELS, NATURE_SHORT, bandOf } from "../presets.js";
 import { describeMix } from "../mixDescription.js";
 
@@ -80,6 +81,7 @@ function SoundControls({ kind, s, set }) {
 
 export default function AdjustSheet({
   open, onClose, kind, settings, onSet, modified, onReset,
+  env = null, // ambiente naturale: { id, config, onSet, onQuick, status, onRetry, summary, title }
 }) {
   const sheetRef = useRef(null);
   const layerRef = useRef(null);
@@ -161,7 +163,7 @@ export default function AdjustSheet({
             <button type="button" className="text-btn" onClick={onReset} disabled={!modified}>
               Ripristina<span className="sr-only"> i valori originali di {settings.name}</span>
             </button>
-            <h2 id="sheet-title"><span className="sr-only">Regola </span>{settings.name}</h2>
+            <h2 id="sheet-title">{env ? env.title : <><span className="sr-only">Regola </span>{settings.name}</>}</h2>
             <button type="button" className="text-btn strong" onClick={onClose} aria-label="Fine, chiudi le regolazioni">
               Fine
             </button>
@@ -170,9 +172,21 @@ export default function AdjustSheet({
 
         <div className="sheet-body">
           {/* cosa si sente ora, aggiornato mentre si regola */}
-          <p className="sheet-summary" aria-live="polite">{describeMix(settings)}</p>
+          <p className="sheet-summary" aria-live="polite">{env ? env.summary : describeMix(settings)}</p>
 
-          <SoundControls kind={kind} s={settings} set={set} />
+          {env ? (
+            <EnvControls
+              envId={env.id}
+              config={env.config}
+              onSet={env.onSet}
+              onQuick={env.onQuick}
+              customized={modified}
+              status={env.status}
+              onRetry={env.onRetry}
+            />
+          ) : (
+            <SoundControls kind={kind} s={settings} set={set} />
+          )}
 
           <p className="note">
             Le modifiche valgono solo per {settings.name} e restano salvate su questo dispositivo.

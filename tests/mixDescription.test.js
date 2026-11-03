@@ -39,9 +39,9 @@ test("una componente spenta non viene mai citata", () => {
 });
 
 test("la descrizione segue le personalizzazioni", () => {
-  const rain = PRESETS.find((p) => p.id === "rain");
-  assert.equal(describeMix(rain), "Pioggia fitta e costante");
-  assert.equal(describeMix({ ...rain, nature: 20, noise: 60 }), "Rumore rosa e pioggia in sottofondo");
+  const waves = PRESETS.find((p) => p.id === "waves");
+  assert.equal(describeMix(waves), "Onde che vanno e vengono");
+  assert.equal(describeMix({ ...waves, nature: 20, noise: 60 }), "Rumore marrone e onde del mare in sottofondo");
 });
 
 test("tutto a zero: invito a regolare, nessun suono inventato", () => {
