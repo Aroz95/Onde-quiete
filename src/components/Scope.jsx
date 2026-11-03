@@ -25,7 +25,7 @@ export default function Scope({ beat, car, tone, noise, nature, playing, color }
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, w, h);
       const amp = p.playing ? 1 : 0.25;
-      const mid = h * 0.42;
+      const mid = h * 0.5; // il testo ora sta sotto il canvas: l'onda si centra
 
       for (let k = 0; k < 3; k++) {
         g.beginPath();

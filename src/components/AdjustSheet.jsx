@@ -2,11 +2,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Slider from "./Slider.jsx";
 import Pills from "./Pills.jsx";
-import { NOISE_LABELS, NATURE_SHORT, TIMER_OPTIONS, bandOf } from "../presets.js";
+import { NOISE_LABELS, NATURE_SHORT, bandOf } from "../presets.js";
+import { describeMix } from "../mixDescription.js";
 
 const noiseOptions = Object.entries(NOISE_LABELS).map(([value, label]) => ({ value, label }));
 const natureOptions = Object.entries(NATURE_SHORT).map(([value, label]) => ({ value, label }));
-const timerOptions = TIMER_OPTIONS.map((o) => ({ value: o.value, label: o.short, srLabel: o.value ? `${o.value} minuti` : "mai" }));
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
 
 function Section({ title, children }) {
@@ -25,13 +25,13 @@ function SoundControls({ kind, s, set }) {
   const noise = (title) => (
     <Section title={title}>
       <Pills label="Colore" context={ctx(title)} options={noiseOptions} value={s.noiseType} onChange={set("noiseType")} />
-      <Slider id="noise" label="Volume" context={ctx(title)} value={s.noise} min={0} max={100} unit="%" onChange={set("noise")} />
+      <Slider id="noise" label="Livello" context={ctx(title)} value={s.noise} min={0} max={100} unit="%" onChange={set("noise")} />
     </Section>
   );
   const nature = (title) => (
     <Section title={title}>
       <Pills label="Suono" context={ctx(title)} options={natureOptions} value={s.natureType} onChange={set("natureType")} />
-      <Slider id="nature" label="Volume" context={ctx(title)} value={s.nature} min={0} max={100} unit="%" onChange={set("nature")} />
+      <Slider id="nature" label="Livello" context={ctx(title)} value={s.nature} min={0} max={100} unit="%" onChange={set("nature")} />
     </Section>
   );
 
@@ -42,7 +42,7 @@ function SoundControls({ kind, s, set }) {
           <Slider id="beat" label="Battimento" value={s.beat} min={0.5} max={40} step={0.5} unit=" Hz" onChange={set("beat")} describedBy="beat-hint" />
           <p className="field-hint" id="beat-hint">{bandOf(s.beat)}: la differenza tra le due orecchie</p>
           <Slider id="car" label="Portante" value={s.car} min={80} max={500} unit=" Hz" onChange={set("car")} />
-          <Slider id="tone" label="Volume" context="onda binaurale" value={s.tone} min={0} max={100} unit="%" onChange={set("tone")} />
+          <Slider id="tone" label="Livello" context="onda binaurale" value={s.tone} min={0} max={100} unit="%" onChange={set("tone")} />
         </Section>
         {noise("Rumore di fondo")}
         {nature("Natura di fondo")}
@@ -71,7 +71,7 @@ function SoundControls({ kind, s, set }) {
   return (
     <>
       <Section title={`Tono a ${s.car} Hz`}>
-        <Slider id="tone" label="Volume" context={`tono a ${s.car} hertz`} value={s.tone} min={0} max={100} unit="%" onChange={set("tone")} />
+        <Slider id="tone" label="Livello" context={`tono a ${s.car} hertz`} value={s.tone} min={0} max={100} unit="%" onChange={set("tone")} />
       </Section>
       {nature("Sottofondo")}
     </>
@@ -80,7 +80,6 @@ function SoundControls({ kind, s, set }) {
 
 export default function AdjustSheet({
   open, onClose, kind, settings, onSet, modified, onReset,
-  volume, onVolume, timerMin, onTimer, remaining, timerPaused,
 }) {
   const sheetRef = useRef(null);
   const layerRef = useRef(null);
@@ -170,22 +169,14 @@ export default function AdjustSheet({
         </div>
 
         <div className="sheet-body">
+          {/* cosa si sente ora, aggiornato mentre si regola */}
+          <p className="sheet-summary" aria-live="polite">{describeMix(settings)}</p>
+
           <SoundControls kind={kind} s={settings} set={set} />
 
-          <Section title="Generale">
-            <Slider id="vol" label="Volume" context="generale" value={volume} min={0} max={100} unit="%" onChange={onVolume} />
-            <Pills label="Spegni dopo" context="minuti" options={timerOptions} value={timerMin} onChange={onTimer} />
-            {remaining && (
-              <p className="field-hint" role="timer" aria-live="off">
-                {timerPaused ? `In pausa: restano ${remaining}` : `Si spegne tra ${remaining}`}
-              </p>
-            )}
-          </Section>
-
           <p className="note">
-            Le modifiche valgono solo per {settings.name} e vengono ricordate. I battimenti binaurali funzionano solo in
-            cuffia; le ricerche sui benefici danno risultati contrastanti, quindi usala come sottofondo e non come terapia.
-            Su iPhone l'ascolto a schermo bloccato richiede iOS 17.5 o successivo. <b>Non usarla alla guida.</b>
+            Le modifiche valgono solo per {settings.name} e restano salvate su questo dispositivo.
+            Volume generale e timer sono nella schermata principale.
           </p>
         </div>
       </div>

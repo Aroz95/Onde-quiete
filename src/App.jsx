@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PRESETS, PRESET_GROUPS, NOISE_LABELS, NATURE_LABELS, bandOf, presetSubtitle, kindOf } from "./presets.js";
+import { PRESETS, PRESET_GROUPS, kindOf } from "./presets.js";
+import { describeMix, needsHeadphones } from "./mixDescription.js";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { playButton, playbackMessage } from "./audio/playbackState.js";
 import { updateMediaSession } from "./audio/background.js";
@@ -7,6 +8,8 @@ import Scope from "./components/Scope.jsx";
 import UpdateBanner from "./components/UpdateBanner.jsx";
 import TabBar from "./components/TabBar.jsx";
 import AdjustSheet from "./components/AdjustSheet.jsx";
+import QuickControls from "./components/QuickControls.jsx";
+import Icon, { presetIcon } from "./components/Icons.jsx";
 import {
   createTimer, resumeTimer, pauseTimer, setTimerDuration, finishTimer,
   timerRemaining, timerOver, formatRemaining,
@@ -32,20 +35,6 @@ function load(key, fallback) {
 }
 function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* memoria non disponibile */ }
-}
-
-// cosa mostrare in grande nel riquadro dell'oscilloscopio
-function describe(s) {
-  if (s.tone > 0 && s.beat > 0) {
-    return { band: bandOf(s.beat), big: `${s.beat} Hz`, small: `portante ${s.car} Hz` };
-  }
-  if (s.tone > 0) {
-    return { band: "tono puro", big: `${s.car} Hz`, small: s.nature > 0 ? NATURE_LABELS[s.natureType].toLowerCase() : "sinusoide" };
-  }
-  if (s.nature > 0) {
-    return { band: "natura", big: "—", small: NATURE_LABELS[s.natureType].toLowerCase() };
-  }
-  return { band: "solo rumore", big: "—", small: `rumore ${NOISE_LABELS[s.noiseType].toLowerCase()}` };
 }
 
 const merge = (preset, tweak) => ({ ...preset, ...(tweak || {}) });
@@ -193,13 +182,22 @@ export default function App() {
   const button = playButton(playback, remainingMs != null);
   const message = playbackMessage(playback);
 
-  const info = describe(settings);
+  const description = describeMix(settings);
+  const headphones = needsHeadphones(settings);
+
+  // stato scritto (non solo colorato) del preset selezionato
+  const stateWord = {
+    playing: "In ascolto",
+    starting: "Avvio…",
+    paused: "In pausa",
+    interrupted: "Interrotto",
+  }[playback.status] || "Selezionato";
 
   // titolo e pulsanti play/pausa nella schermata di blocco
   useEffect(() => {
     updateMediaSession({
       title: settings.name,
-      subtitle: info.big !== "—" ? `${info.band} · ${info.big}` : info.small,
+      subtitle: description,
       playing,
       onPlay: start,
       onPause: pause,
@@ -209,52 +207,64 @@ export default function App() {
   return (
     <main className="wrap">
       <UpdateBanner />
-      <header>
+      <header className="top">
         <h1>Onde Quiete</h1>
-        <span className="hint">🎧 usa le cuffie</span>
       </header>
 
-      <button type="button" className="scope" onClick={() => setSheetOpen(true)} aria-label={`Regola ${settings.name}`}>
-        <Scope {...settings} playing={playing} />
-        <span className="readout">
-          <span>
+      <section className="now" aria-label="In ascolto">
+        <button type="button" className="scope" onClick={() => setSheetOpen(true)} aria-label={`Regola ${settings.name}`}>
+          {/* visualizzazione decorativa: non misura il suono né l'attività cerebrale */}
+          <Scope {...settings} playing={playing} />
+          <span className="readout">
+            <span className="now-state">
+              {stateWord}
+              {remaining && <span className="now-timer"> · {timerPaused ? "restano" : "si spegne tra"} {remaining}</span>}
+            </span>
             <span className="mode">
               {settings.name}
-              {modified && <span className="badge">modificato</span>}
+              {modified && <span className="badge">su misura</span>}
             </span>
-            <span className="band">{info.band}</span>
+            <span className="now-desc">{description}</span>
           </span>
-          <span className="hz">
-            <span>{info.big}</span>
-            <small>{remaining ? (timerPaused ? `in pausa · restano ${remaining}` : `si spegne tra ${remaining}`) : info.small}</small>
-          </span>
-        </span>
-      </button>
-
-      <div className="controls">
-        <button
-          type="button"
-          className={`play${active ? " on" : ""}`}
-          onClick={button.action === "pause" ? pause : start}
-          disabled={!button.action}
-          aria-busy={playback.status === "starting"}
-        >
-          {button.label}
         </button>
-        <button type="button" className="adjust" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
-            <circle cx="16" cy="7" r="2" />
-            <circle cx="10" cy="17" r="2" />
-          </svg>
-          <span>Regola</span>
-        </button>
-      </div>
 
-      {/* sempre presente, così gli screen reader annunciano il messaggio quando compare */}
-      <p className="status-msg" role="status" aria-live="polite" hidden={!message}>
-        {message}
-      </p>
+        <div className="controls">
+          <button
+            type="button"
+            className={`play${active ? " on" : ""}`}
+            onClick={button.action === "pause" ? pause : start}
+            disabled={!button.action}
+            aria-busy={playback.status === "starting"}
+          >
+            {button.label}
+          </button>
+          <button type="button" className="adjust" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
+            <Icon name="sliders" />
+            <span>Regola</span>
+          </button>
+        </div>
+
+        <QuickControls
+          volume={volume}
+          onVolume={setVolume}
+          timerMin={timer.durationMin}
+          onTimer={changeTimer}
+          remaining={remaining}
+          running={playing}
+        />
+
+        {/* sempre presente, così gli screen reader annunciano il messaggio quando compare */}
+        <p className="status-msg" role="status" aria-live="polite" hidden={!message}>
+          {message}
+        </p>
+
+        {headphones && (
+          <p className="hint-line">
+            <Icon name="headphones" />
+            <span>Usa le cuffie: l'effetto binaurale nasce da un suono diverso per ogni orecchio.</span>
+          </p>
+        )}
+      </section>
 
       {PRESET_GROUPS.map((group) => (
         <section
@@ -265,29 +275,44 @@ export default function App() {
           hidden={tab !== group.id}
           className="panel"
         >
-          <h2 className="label">{group.title}</h2>
-          <div className={`grid${group.presets.length === 4 ? " grid4" : ""}`}>
+          <div className="panel-head">
+            <h2 className="label">{group.title}</h2>
+            <p className="panel-hint">
+              {active ? "Tocca un altro suono per passare a quello. Il timer continua." : "Tocca un suono per ascoltarlo."}
+            </p>
+          </div>
+          <div className="grid">
             {group.presets.map((p) => {
               const shown = merge(p, tweaks[p.id]);
+              const selected = presetId === p.id;
+              const kindP = kindOf(p.id);
               return (
                 <button
                   key={p.id}
                   type="button"
                   className="chip"
-                  aria-pressed={presetId === p.id}
+                  aria-pressed={selected}
                   onClick={() => choosePreset(p)}
+                  style={{ "--tint": p.color }}
                 >
-                  <i style={{ background: p.color }} />
-                  <b>{p.name}</b>
-                  <span>
-                    {presetSubtitle(shown)}
-                    {tweaks[p.id] && " · su misura"}
+                  <span className="chip-top">
+                    <Icon name={presetIcon(kindP, p)} className="chip-icon" />
+                    {selected && (
+                      <span className="chip-state">
+                        <Icon name="check" className="chip-check" />
+                        {stateWord}
+                      </span>
+                    )}
                   </span>
+                  <b>{p.name}</b>
+                  <span className="chip-desc">{describeMix(shown)}</span>
+                  {tweaks[p.id] && <span className="chip-tag">su misura</span>}
+                  {!active && <span className="sr-only">, tocca per ascoltare</span>}
                 </button>
               );
             })}
           </div>
-          {group.note && <p className="note groupnote">{group.note}</p>}
+          {group.note && <p className="note">{group.note}</p>}
         </section>
       ))}
 
@@ -298,6 +323,11 @@ export default function App() {
         playing={playing}
       />
 
+      <footer className="foot note">
+        Le ricerche sui battimenti binaurali danno risultati contrastanti: usala come sottofondo, non come terapia.
+        Tieni il volume basso. <b>Non usarla alla guida.</b>
+      </footer>
+
       <AdjustSheet
         open={sheetOpen}
         onClose={closeSheet}
@@ -306,12 +336,6 @@ export default function App() {
         onSet={setValue}
         modified={modified}
         onReset={resetPreset}
-        volume={volume}
-        onVolume={setVolume}
-        timerMin={timer.durationMin}
-        onTimer={changeTimer}
-        remaining={remaining}
-        timerPaused={timerPaused}
       />
     </main>
   );

@@ -42,7 +42,7 @@ export default function TabBar({ tabs, active, onChange, playing }) {
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">{ICONS[t.id]}</svg>
             <span>{t.label}</span>
-            {t.hasCurrent && playing && <i className="tab-dot" aria-label="in riproduzione" />}
+            {t.hasCurrent && playing && <><i className="tab-dot" aria-hidden="true" /><span className="sr-only">, in ascolto</span></>}
           </button>
         ))}
       </div>
