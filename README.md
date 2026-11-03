@@ -10,10 +10,10 @@ App web in React che genera battimenti binaurali e rumore colorato per rilassars
 - **Battimenti binaurali**: due sinusoidi a frequenze leggermente diverse, una per orecchio (delta, theta, alfa, beta, gamma). Con battimento a 0 Hz si ottiene un tono puro
 - **Rumore colorato**: rosa, marrone o bianco
 - **Controlli fini**: battimento, frequenza, volume di tono, natura e rumore, volume generale
-
-Tono, natura e rumore si possono mescolare liberamente.
 - **Timer** con spegnimento in dissolvenza (10, 25, 45, 60 minuti)
 - Tiene lo schermo acceso durante la riproduzione, dove il browser lo consente
+
+Tono, natura e rumore si possono mescolare liberamente.
 
 L'audio è generato in tempo reale con la Web Audio API: nessun file audio da scaricare.
 
