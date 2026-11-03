@@ -5,7 +5,7 @@ App web in React che genera battimenti binaurali e rumore colorato per rilassars
 ## Funzioni
 
 - **9 preset per esigenza**: Relax, Concentrazione, Sonno, Meditazione, Creatività, Energia, Studio, Calma, Solo rumore
-- **4 suoni della natura**: Pioggia, Onde del mare, Vento, Camino, sintetizzati in tempo reale
+- **5 suoni della natura**: Pioggia, Onde del mare, Vento, Camino, Temporale, sintetizzati in tempo reale
 - **4 frequenze Solfeggio**: 396, 432, 528 e 639 Hz come toni puri con un leggero sottofondo naturale
 - **Battimenti binaurali**: due sinusoidi a frequenze leggermente diverse, una per orecchio (delta, theta, alfa, beta, gamma). Con battimento a 0 Hz si ottiene un tono puro
 - **Rumore colorato**: rosa, marrone o bianco
@@ -43,7 +43,7 @@ src/
   App.jsx                 interfaccia e stato
   presets.js              preset e bande di frequenza
   audio/useAudioEngine.js motore Web Audio (oscillatori, rumore, natura, volumi)
-  audio/natureSounds.js   sintesi di pioggia, onde, vento e camino
+  audio/natureSounds.js   sintesi di pioggia, onde, vento, camino e temporale
   components/Scope.jsx    oscilloscopio animato
   components/Slider.jsx   cursore con etichetta e valore
   styles.css

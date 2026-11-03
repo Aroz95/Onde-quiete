@@ -1,10 +1,12 @@
 // Suoni della natura sintetizzati: nessun file audio, tutto generato al volo.
-// Ogni buffer dura LOOP_SECONDS e si ripete con una dissolvenza incrociata per evitare click.
+// Ogni buffer dura LOOP_SECONDS (o il valore in LOOP_OVERRIDE) e si ripete
+// con una dissolvenza incrociata per evitare click.
 
 const LOOP_SECONDS = 20;
+const LOOP_OVERRIDE = { storm: 45 }; // loop più lungo, così i tuoni non sembrano ripetersi
 const FADE_SECONDS = 0.08;
 
-function rainChannel(sr, n) {
+function rainChannel(sr, n, { dropsPerSec = 140, bed = 0.35 } = {}) {
   const out = new Float32Array(n);
   let lp = 0, soft = 0, drop = 0, dropDecay = 0.99;
   for (let i = 0; i < n; i++) {
@@ -14,13 +16,51 @@ function rainChannel(sr, n) {
     const hiss = w - lp;
     soft += 0.5 * (hiss - soft);
     // gocce: brevi impulsi di rumore che decadono in pochi millisecondi
-    if (Math.random() < 140 / sr) {
+    if (Math.random() < dropsPerSec / sr) {
       drop = 0.15 + Math.random() * 0.6;
       dropDecay = Math.exp(-1 / (sr * (0.002 + Math.random() * 0.006)));
     }
     drop *= dropDecay;
-    out[i] = soft * 0.35 + (Math.random() * 2 - 1) * drop;
+    out[i] = soft * bed + (Math.random() * 2 - 1) * drop;
   }
+  return out;
+}
+
+// Tuoni nel loop del temporale: istante d'inizio (s), durata (s), intensità,
+// schiocco iniziale (fulmine vicino), posizione stereo (-1 sinistra, +1 destra).
+const THUNDERS = [
+  { at: 3, dur: 8, amp: 1, crack: 0.7, pan: -0.3 },
+  { at: 17, dur: 10, amp: 0.65, crack: 0, pan: 0.5 },
+  { at: 31, dur: 7, amp: 0.85, crack: 0.35, pan: 0.1 },
+  { at: 40, dur: 3.5, amp: 0.35, crack: 0, pan: -0.6 },
+];
+
+function stormChannel(sr, n, ch) {
+  // pioggia più fitta e più piena
+  const out = rainChannel(sr, n, { dropsPerSec: 320, bed: 0.55 });
+  for (const th of THUNDERS) {
+    const start = Math.floor(th.at * sr);
+    const end = Math.min(n, Math.floor((th.at + th.dur) * sr));
+    const side = ch === 0 ? 1 - th.pan * 0.6 : 1 + th.pan * 0.6;
+    let r1 = 0, r2 = 0, r3 = 0;
+    for (let i = start; i < end; i++) {
+      const w = Math.random() * 2 - 1;
+      // rimbombo: rumore filtrato molto in basso, più un po' di medi per la "voce" del tuono
+      r1 += 0.012 * (w - r1);
+      r2 += 0.012 * (r1 - r2);
+      r3 += 0.03 * (w - r3);
+      const x = (i - start) / sr;
+      const attack = Math.min(1, x / 0.25);
+      const tail = Math.exp(-x / (th.dur / 3.5)) * Math.min(1, (th.dur - x) / 0.5);
+      // il tuono "rotola": l'intensità ondeggia mentre si spegne
+      const roll = 0.55 + 0.25 * Math.sin(2 * Math.PI * x * 0.8 + th.at) + 0.2 * Math.sin(2 * Math.PI * x * 2.3 + th.at * 2);
+      const body = (r2 * 38 + r3 * 3) * attack * tail * roll;
+      const crack = th.crack ? w * th.crack * Math.exp(-x / 0.06) * 1.1 : 0;
+      out[i] += (body + crack) * th.amp * side;
+    }
+  }
+  // compressione morbida: i picchi dei tuoni non devono abbassare tutta la pioggia
+  for (let i = 0; i < n; i++) out[i] = Math.tanh(out[i] * 0.9);
   return out;
 }
 
@@ -86,13 +126,14 @@ const GENERATORS = {
   waves: (sr, n, ch) => wavesChannel(sr, n, ch * 0.35),
   wind: (sr, n, ch) => windChannel(sr, n, ch * 0.13),
   fire: (sr, n) => fireChannel(sr, n),
+  storm: (sr, n, ch) => stormChannel(sr, n, ch),
 };
 
 export function makeNatureBuffer(ctx, type) {
   const gen = GENERATORS[type];
   if (!gen) return null;
   const sr = ctx.sampleRate;
-  const len = Math.floor(sr * LOOP_SECONDS);
+  const len = Math.floor(sr * (LOOP_OVERRIDE[type] ?? LOOP_SECONDS));
   const fade = Math.floor(sr * FADE_SECONDS);
   const buf = ctx.createBuffer(2, len, sr);
   let peak = 0;

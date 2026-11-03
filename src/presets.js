@@ -26,6 +26,7 @@ export const PRESET_GROUPS = [
       { id: "waves", name: "Onde del mare", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "brown", nature: 80, natureType: "waves", color: "#5fb8c9" },
       { id: "wind", name: "Vento", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "brown", nature: 75, natureType: "wind", color: "#c3cbd6" },
       { id: "fire", name: "Camino", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "brown", nature: 80, natureType: "fire", color: "#ef9f6a" },
+      { id: "storm", name: "Temporale", beat: 10, car: 200, tone: 0, noise: 0, noiseType: "brown", nature: 80, natureType: "storm", color: "#8e9bd1" },
     ],
   },
   {
@@ -54,6 +55,7 @@ export const NATURE_LABELS = {
   waves: "Onde del mare",
   wind: "Vento",
   fire: "Camino",
+  storm: "Temporale",
 };
 
 export const TIMER_OPTIONS = [
