@@ -80,6 +80,17 @@ Per i comportamenti di iOS (schermo bloccato, interruzioni, sessione audio) l'em
 | Selezione non solo a colori | — | ✅ testo, spunta, barretta | — |
 | Avvio al tocco comprensibile | — | ✅ | — |
 
+## OQ-09 Movimento e consumo dell'animazione
+
+| Criterio | Browser | Dispositivo |
+|---|---|---|
+| In pausa nessun ciclo di disegno | ✅ 0 fotogrammi in 1,5 s (60/s in ascolto) | — |
+| Movimento ridotto: niente tremolii né oscillazioni | ✅ immagine identica dopo 1,5 s | ⏳ Riduci movimento di iOS |
+| Preferenza cambiata durante la sessione | ✅ in entrambi i sensi | — |
+| Ritorno in primo piano ripristina l'onda | ✅ | ⏳ |
+| Rotazione, altezza e densità dei pixel senza deformazioni | ✅ 390↔844 px, altezza, 1×→3× | ⏳ rotazione reale |
+| La grafica non tocca l'audio | ✅ audio attivo con onda ferma o pagina nascosta | — |
+
 ## Da fare per il rilascio
 
 1. Prove su iPhone (Safari e app nella Home) della [checklist](collaudo-dispositivi.md), in particolare:
