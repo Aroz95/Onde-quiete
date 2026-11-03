@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { makeNatureBuffer } from "./natureSounds.js";
 
 function makeNoiseBuffer(ctx, type) {
   const len = ctx.sampleRate * 6;
@@ -30,9 +31,10 @@ function makeNoiseBuffer(ctx, type) {
 
 /**
  * Motore audio: due oscillatori sinusoidali in stereo (battimento binaurale)
- * più un rumore colorato in loop. I parametri cambiano con transizioni morbide.
+ * più un rumore colorato e un suono della natura in loop.
+ * I parametri cambiano con transizioni morbide.
  */
-export function useAudioEngine({ beat, car, tone, noise, noiseType, volume }) {
+export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natureType, volume }) {
   const nodes = useRef(null);
   const wakeLock = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -51,6 +53,25 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, volume }) {
     n.noiseSrc = src;
   }, []);
 
+  // i buffer della natura sono costosi da generare: li teniamo in cache per tipo
+  const startNature = useCallback((type) => {
+    const n = nodes.current;
+    if (!n) return;
+    if (n.natureSrc) {
+      try { n.natureSrc.stop(); } catch { /* già fermo */ }
+      n.natureSrc = null;
+    }
+    if (!n.natureCache[type]) n.natureCache[type] = makeNatureBuffer(n.ctx, type);
+    const buffer = n.natureCache[type];
+    if (!buffer) return;
+    const src = n.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    src.connect(n.natureGain);
+    src.start();
+    n.natureSrc = src;
+  }, []);
+
   const build = useCallback(() => {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     const ctx = new Ctx();
@@ -63,8 +84,10 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, volume }) {
 
     const toneGain = ctx.createGain();
     const noiseGain = ctx.createGain();
+    const natureGain = ctx.createGain();
     toneGain.connect(master);
     noiseGain.connect(master);
+    natureGain.connect(master);
 
     const panL = ctx.createStereoPanner();
     const panR = ctx.createStereoPanner();
@@ -78,9 +101,13 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, volume }) {
     oscL.start();
     oscR.start();
 
-    nodes.current = { ctx, master, analyser, toneGain, noiseGain, oscL, oscR, noiseSrc: null, noiseType };
+    nodes.current = {
+      ctx, master, analyser, toneGain, noiseGain, natureGain, oscL, oscR,
+      noiseSrc: null, noiseType, natureSrc: null, natureType, natureCache: {},
+    };
     startNoise(noiseType);
-  }, [noiseType, startNoise]);
+    startNature(natureType);
+  }, [noiseType, natureType, startNoise, startNature]);
 
   // aggiorna frequenze e volumi
   useEffect(() => {
@@ -91,8 +118,17 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, volume }) {
     n.oscR.frequency.setTargetAtTime(car + beat, t, 0.3);
     n.toneGain.gain.setTargetAtTime((tone / 100) * 0.35, t, 0.3);
     n.noiseGain.gain.setTargetAtTime((noise / 100) * 0.5, t, 0.3);
+    n.natureGain.gain.setTargetAtTime((nature / 100) * 0.8, t, 0.4);
     if (playing) n.master.gain.setTargetAtTime(volume / 100, t, 0.2);
-  }, [beat, car, tone, noise, volume, playing]);
+  }, [beat, car, tone, noise, nature, volume, playing]);
+
+  // cambia suono della natura
+  useEffect(() => {
+    const n = nodes.current;
+    if (!n || n.natureType === natureType) return;
+    n.natureType = natureType;
+    startNature(natureType);
+  }, [natureType, startNature]);
 
   // cambia tipo di rumore
   useEffect(() => {

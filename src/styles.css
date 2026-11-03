@@ -61,7 +61,11 @@ canvas { display: block; width: 100%; height: 180px; }
   cursor: pointer; text-align: left; font-family: var(--display); min-width: 0;
   transition: border-color 0.15s, background 0.15s;
 }
-.chip b { font-weight: 600; font-size: 0.95rem; }
+.grid4 { grid-template-columns: repeat(4, 1fr); }
+.groupnote { margin-top: 8px; }
+.label.sub { margin: 6px 0 -4px; }
+.label.sub:first-child { margin-top: 0; }
+.chip b { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
 .chip span { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); }
 .chip i { width: 10px; height: 10px; border-radius: 50%; margin-bottom: 6px; }
 .chip[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
@@ -81,7 +85,7 @@ select { background: var(--panel); color: var(--fg); border: 1px solid var(--lin
 .note b { color: var(--warn); font-weight: 500; }
 
 @media (max-width: 420px) {
-  .grid { grid-template-columns: repeat(2, 1fr); }
+  .grid, .grid4 { grid-template-columns: repeat(2, 1fr); }
   .row { grid-template-columns: 80px 1fr 56px; }
 }
 

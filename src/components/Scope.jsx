@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 
 // Oscilloscopio decorativo: la sinusoide segue la portante, l'inviluppo il battimento.
-export default function Scope({ beat, car, tone, noise, playing, color }) {
+export default function Scope({ beat, car, tone, noise, nature, playing, color }) {
   const canvasRef = useRef(null);
   const params = useRef({});
-  params.current = { beat, car, tone, noise, playing, color };
+  params.current = { beat, car, tone, noise: noise + (nature || 0), playing, color };
 
   useEffect(() => {
     const cv = canvasRef.current;
@@ -32,7 +32,8 @@ export default function Scope({ beat, car, tone, noise, playing, color }) {
         g.lineWidth = k ? 1 : 2;
         g.strokeStyle = k ? "rgba(180,167,255,.25)" : p.color;
         for (let x = 0; x <= w; x += 2) {
-          const env = Math.cos((x / w) * Math.PI * 2 * (Math.min(p.beat, 12) / 4) + ph * (k ? 0.7 : 1));
+          // con battimento 0 (tono puro) l'inviluppo resta piatto
+          const env = p.beat > 0 ? Math.cos((x / w) * Math.PI * 2 * (Math.min(p.beat, 12) / 4) + ph * (k ? 0.7 : 1)) : 0.8;
           const y =
             mid +
             Math.sin(x * 0.18 * (p.car / 200) + ph * 6 + k) * env * (h * 0.22) * amp * (p.tone ? 1 : 0.2) +
