@@ -7,6 +7,24 @@ import { updateMediaSession } from "./audio/background.js";
 import Scope from "./components/Scope.jsx";
 import Slider from "./components/Slider.jsx";
 import UpdateBanner from "./components/UpdateBanner.jsx";
+import TabBar from "./components/TabBar.jsx";
+
+const TABS = [
+  { id: "needs", label: "Esigenze" },
+  { id: "nature", label: "Natura" },
+  { id: "solfeggio", label: "Solfeggio" },
+  { id: "settings", label: "Regola" },
+];
+const TAB_KEY = "onde-quiete-tab";
+
+function savedTab() {
+  try {
+    const t = localStorage.getItem(TAB_KEY);
+    return TABS.some((x) => x.id === t) ? t : "needs";
+  } catch {
+    return "needs";
+  }
+}
 
 const CUSTOM_COLOR = "#7fd1c4";
 
@@ -30,6 +48,16 @@ export default function App() {
   const [timerMin, setTimerMin] = useState(0);
   const [endAt, setEndAt] = useState(0);
   const [remaining, setRemaining] = useState("");
+  const [tab, setTab] = useState(savedTab);
+
+  const selectTab = (id) => {
+    setTab(id);
+    try { localStorage.setItem(TAB_KEY, id); } catch { /* memoria non disponibile */ }
+  };
+
+  // la scheda che contiene il preset in ascolto riceve un pallino nella barra
+  const currentTab =
+    settings.id === "custom" ? "settings" : PRESET_GROUPS.find((g) => g.presets.some((p) => p.id === settings.id))?.id;
 
   const { playing, setRunning } = useAudioEngine({ ...settings, volume });
 
@@ -113,8 +141,15 @@ export default function App() {
       </button>
 
       {PRESET_GROUPS.map((group) => (
-        <section key={group.id} aria-labelledby={`g-${group.id}`}>
-          <p className="label" id={`g-${group.id}`}>{group.title}</p>
+        <section
+          key={group.id}
+          id={`panel-${group.id}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${group.id}`}
+          hidden={tab !== group.id}
+          className="panel"
+        >
+          <h2 className="label">{group.title}</h2>
           <div className={`grid${group.presets.length === 4 ? " grid4" : ""}`}>
             {group.presets.map((p) => (
               <button
@@ -134,7 +169,15 @@ export default function App() {
         </section>
       ))}
 
-      <section className="ctrl" aria-label="Regolazioni">
+      <section
+        id="panel-settings"
+        role="tabpanel"
+        aria-labelledby="tab-settings"
+        hidden={tab !== "settings"}
+        className="panel"
+      >
+      <h2 className="label">Regola il suono</h2>
+      <div className="ctrl">
         <p className="label sub">Tono</p>
         <Slider id="beat" label="Battimento" value={settings.beat} min={0} max={40} step={0.5} unit=" Hz" onChange={update("beat")} />
         <Slider id="car" label="Frequenza" value={settings.car} min={80} max={700} unit=" Hz" onChange={update("car")} />
@@ -164,7 +207,7 @@ export default function App() {
 
         <p className="label sub">Generale</p>
         <Slider id="vol" label="Volume" value={volume} min={0} max={100} unit="%" onChange={setVolume} />
-      </section>
+      </div>
 
       <div className="timer">
         <label htmlFor="timer" className="note">Spegnimento automatico</label>
@@ -182,6 +225,9 @@ export default function App() {
         contrastanti: usala come sottofondo, non come terapia. Su iPhone l'ascolto a schermo bloccato richiede iOS 17.5
         o successivo. Tieni il volume basso. <b>Non usarla alla guida.</b>
       </p>
+      </section>
+
+      <TabBar tabs={TABS.map((t) => ({ ...t, hasCurrent: t.id === currentTab }))} active={tab} onChange={selectTab} playing={playing} />
     </main>
   );
 }

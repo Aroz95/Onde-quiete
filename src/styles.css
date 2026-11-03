@@ -14,6 +14,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -27,7 +28,8 @@ body {
   line-height: 1.5;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(40px, env(safe-area-inset-bottom, 0px));
+  /* in basso lasciamo spazio alla barra delle schede (circa 64px) più l'area dell'indicatore Home */
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
 .wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
@@ -52,7 +54,42 @@ canvas { display: block; width: 100%; height: 180px; }
 .play:active { transform: scale(0.98); }
 .play.on { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
 
-.label { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.label { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 400; }
+
+.panel { display: flex; flex-direction: column; gap: 14px; }
+.panel > .label { margin: 0; }
+.panel .groupnote { margin-top: -4px; }
+
+/* barra delle schede stile iOS: vetro sfocato fissato in basso */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding-left: max(8px, env(safe-area-inset-left, 0px));
+  padding-right: max(8px, env(safe-area-inset-right, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+.tabbar-inner { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+.tab {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px 6px; min-height: 56px; border: 0; background: none; color: var(--muted);
+  font-family: var(--display); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.01em;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color 0.15s;
+}
+.tab svg {
+  width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; transition: transform 0.2s;
+}
+.tab[aria-selected="true"] { color: var(--accent); }
+.tab[aria-selected="true"] svg { transform: translateY(-1px) scale(1.06); stroke-width: 2.1; }
+.tab:active svg { transform: scale(0.92); }
+.tab:focus-visible { outline: 2px solid var(--accent2); outline-offset: -4px; border-radius: 12px; }
+.tab-dot {
+  position: absolute; top: 7px; left: calc(50% + 11px); width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--bg);
+}
 
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .chip {
@@ -103,5 +140,5 @@ select { background: var(--panel); color: var(--fg); border: 1px solid var(--lin
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .play, .chip { transition: none; }
+  .play, .chip, .tab, .tab svg { transition: none; }
 }
