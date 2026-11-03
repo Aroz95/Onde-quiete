@@ -1,16 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Slider from "./Slider.jsx";
 import Pills from "./Pills.jsx";
 import { NOISE_LABELS, NATURE_SHORT, TIMER_OPTIONS, bandOf } from "../presets.js";
 
 const noiseOptions = Object.entries(NOISE_LABELS).map(([value, label]) => ({ value, label }));
 const natureOptions = Object.entries(NATURE_SHORT).map(([value, label]) => ({ value, label }));
-const timerOptions = TIMER_OPTIONS.map((o) => ({ value: o.value, label: o.short }));
+const timerOptions = TIMER_OPTIONS.map((o) => ({ value: o.value, label: o.short, srLabel: o.value ? `${o.value} minuti` : "mai" }));
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
 
 function Section({ title, children }) {
+  const id = useId();
   return (
-    <section className="sheet-section">
-      <h3 className="label">{title}</h3>
+    <section className="sheet-section" aria-labelledby={id}>
+      <h3 className="label" id={id}>{title}</h3>
       <div className="sheet-card">{children}</div>
     </section>
   );
@@ -18,16 +21,17 @@ function Section({ title, children }) {
 
 // I controlli cambiano in base al tipo di suono: si mostra solo ciò che ha effetto.
 function SoundControls({ kind, s, set }) {
+  const ctx = (title) => title.toLowerCase();
   const noise = (title) => (
     <Section title={title}>
-      <Pills label="Colore" options={noiseOptions} value={s.noiseType} onChange={set("noiseType")} />
-      <Slider id="noise" label="Volume" value={s.noise} min={0} max={100} unit="%" onChange={set("noise")} />
+      <Pills label="Colore" context={ctx(title)} options={noiseOptions} value={s.noiseType} onChange={set("noiseType")} />
+      <Slider id="noise" label="Volume" context={ctx(title)} value={s.noise} min={0} max={100} unit="%" onChange={set("noise")} />
     </Section>
   );
   const nature = (title) => (
     <Section title={title}>
-      <Pills label="Suono" options={natureOptions} value={s.natureType} onChange={set("natureType")} />
-      <Slider id="nature" label="Volume" value={s.nature} min={0} max={100} unit="%" onChange={set("nature")} />
+      <Pills label="Suono" context={ctx(title)} options={natureOptions} value={s.natureType} onChange={set("natureType")} />
+      <Slider id="nature" label="Volume" context={ctx(title)} value={s.nature} min={0} max={100} unit="%" onChange={set("nature")} />
     </Section>
   );
 
@@ -35,10 +39,10 @@ function SoundControls({ kind, s, set }) {
     return (
       <>
         <Section title="Onda binaurale">
-          <Slider id="beat" label="Battimento" value={s.beat} min={0.5} max={40} step={0.5} unit=" Hz" onChange={set("beat")} />
-          <p className="field-hint">{bandOf(s.beat)}: la differenza tra le due orecchie</p>
+          <Slider id="beat" label="Battimento" value={s.beat} min={0.5} max={40} step={0.5} unit=" Hz" onChange={set("beat")} describedBy="beat-hint" />
+          <p className="field-hint" id="beat-hint">{bandOf(s.beat)}: la differenza tra le due orecchie</p>
           <Slider id="car" label="Portante" value={s.car} min={80} max={500} unit=" Hz" onChange={set("car")} />
-          <Slider id="tone" label="Volume" value={s.tone} min={0} max={100} unit="%" onChange={set("tone")} />
+          <Slider id="tone" label="Volume" context="onda binaurale" value={s.tone} min={0} max={100} unit="%" onChange={set("tone")} />
         </Section>
         {noise("Rumore di fondo")}
         {nature("Natura di fondo")}
@@ -57,7 +61,7 @@ function SoundControls({ kind, s, set }) {
     return (
       <>
         <Section title="Natura">
-          <Slider id="nature" label="Intensità" value={s.nature} min={0} max={100} unit="%" onChange={set("nature")} />
+          <Slider id="nature" label="Intensità" context="natura" value={s.nature} min={0} max={100} unit="%" onChange={set("nature")} />
         </Section>
         {noise("Rumore di fondo")}
       </>
@@ -67,7 +71,7 @@ function SoundControls({ kind, s, set }) {
   return (
     <>
       <Section title={`Tono a ${s.car} Hz`}>
-        <Slider id="tone" label="Volume" value={s.tone} min={0} max={100} unit="%" onChange={set("tone")} />
+        <Slider id="tone" label="Volume" context={`tono a ${s.car} hertz`} value={s.tone} min={0} max={100} unit="%" onChange={set("tone")} />
       </Section>
       {nature("Sottofondo")}
     </>
@@ -88,16 +92,40 @@ export default function AdjustSheet({
   const [drag, setDrag] = useState(0);
   const startY = useRef(null);
 
-  // Esc per chiudere, niente scorrimento della pagina sotto il pannello
+  // Comportamento modale (OQ-04): a pannello aperto
+  //  - il resto dell'app è inerte: niente tastiera, tocchi o lettura da screen reader
+  //  - Tab e Maiusc+Tab girano solo tra i controlli del pannello
+  //  - Esc chiude; alla chiusura il focus torna a chi aveva aperto il pannello
   useEffect(() => {
     if (!open) return;
-    const onKey = (e) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
+    const opener = document.activeElement;
+    const app = document.getElementById("root");
+    if (app) { app.inert = true; app.setAttribute("aria-hidden", "true"); }
     document.body.classList.add("sheet-open");
-    sheetRef.current?.focus();
+    // il focus va sul pannello stesso, che ha il titolo: lo screen reader lo annuncia
+    sheetRef.current?.focus({ preventScroll: true });
+
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (e.key !== "Tab") return;
+      // solo ciò che il Tab raggiunge davvero: visibile e senza tabindex negativo
+      // (le pillole non selezionate si raggiungono con le frecce, non con il Tab)
+      const items = [...sheetRef.current.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null && el.tabIndex >= 0);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      const inside = sheetRef.current.contains(document.activeElement);
+      if (e.shiftKey && (document.activeElement === first || !inside || document.activeElement === sheetRef.current)) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !inside)) {
+        e.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.classList.remove("sheet-open");
+      if (app) { app.inert = false; app.removeAttribute("aria-hidden"); }
+      if (opener && opener.isConnected && typeof opener.focus === "function") opener.focus({ preventScroll: true });
     };
   }, [open, onClose]);
 
@@ -115,7 +143,8 @@ export default function AdjustSheet({
 
   const set = (key) => (value) => onSet(key, value);
 
-  return (
+  // il pannello sta fuori dall'app (portale su <body>), così l'app intera può diventare inerte
+  return createPortal(
     <div ref={layerRef} className={`sheet-layer${open ? " open" : ""}`} aria-hidden={!open}>
       <div className="sheet-backdrop" onClick={onClose} />
       <div
@@ -131,10 +160,12 @@ export default function AdjustSheet({
           <span className="grabber" aria-hidden="true" />
           <div className="sheet-bar">
             <button type="button" className="text-btn" onClick={onReset} disabled={!modified}>
-              Ripristina
+              Ripristina<span className="sr-only"> i valori originali di {settings.name}</span>
             </button>
-            <h2 id="sheet-title">{settings.name}</h2>
-            <button type="button" className="text-btn strong" onClick={onClose}>Fine</button>
+            <h2 id="sheet-title"><span className="sr-only">Regola </span>{settings.name}</h2>
+            <button type="button" className="text-btn strong" onClick={onClose} aria-label="Fine, chiudi le regolazioni">
+              Fine
+            </button>
           </div>
         </div>
 
@@ -142,10 +173,10 @@ export default function AdjustSheet({
           <SoundControls kind={kind} s={settings} set={set} />
 
           <Section title="Generale">
-            <Slider id="vol" label="Volume" value={volume} min={0} max={100} unit="%" onChange={onVolume} />
-            <Pills label="Spegni dopo" options={timerOptions} value={timerMin} onChange={onTimer} />
+            <Slider id="vol" label="Volume" context="generale" value={volume} min={0} max={100} unit="%" onChange={onVolume} />
+            <Pills label="Spegni dopo" context="minuti" options={timerOptions} value={timerMin} onChange={onTimer} />
             {remaining && (
-              <p className="field-hint">
+              <p className="field-hint" role="timer" aria-live="off">
                 {timerPaused ? `In pausa: restano ${remaining}` : `Si spegne tra ${remaining}`}
               </p>
             )}
@@ -158,6 +189,7 @@ export default function AdjustSheet({
           </p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
