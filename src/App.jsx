@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PRESETS, PRESET_GROUPS, NOISE_LABELS, NATURE_LABELS, bandOf, presetSubtitle, kindOf } from "./presets.js";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
+import { playButton, playbackMessage } from "./audio/playbackState.js";
 import { updateMediaSession } from "./audio/background.js";
 import Scope from "./components/Scope.jsx";
 import UpdateBanner from "./components/UpdateBanner.jsx";
@@ -75,7 +76,11 @@ export default function App() {
   useEffect(() => save(STORE.preset, presetId), [presetId]);
   useEffect(() => save(STORE.volume, volume), [volume]);
 
-  const { playing, setRunning } = useAudioEngine({ ...settings, volume });
+  const engine = useAudioEngine({ ...settings, volume });
+  const { playback } = engine;
+  // "playing" significa che l'audio suona davvero, non solo che è stato richiesto
+  const playing = playback.status === "playing";
+  const active = playback.status === "playing" || playback.status === "starting";
 
   const selectTab = (id) => {
     setTab(id);
@@ -102,30 +107,28 @@ export default function App() {
       return next;
     });
 
-  // Avvia o riprende: il timer riparte dal residuo, oppure dalla durata intera se è una nuova sessione.
-  const start = () => {
-    const t = Date.now();
-    setRunning(true);
-    setTimer((tm) => resumeTimer(tm, t));
-    setNow(t);
-  };
-  // Pausa: l'audio si ferma e il residuo resta congelato.
-  const pause = () => {
-    const t = Date.now();
-    setRunning(false);
-    setTimer((tm) => pauseTimer(tm, t));
-    setNow(t);
-  };
+  // Avvia o riprende. Il timer parte solo quando l'audio è confermato (vedi effetto più sotto).
+  const start = () => engine.play();
+  // Pausa dell'utente: il residuo del timer resta congelato.
+  const pause = () => engine.pause();
   // Fine per timer: l'audio si spegne e la sessione si chiude.
   const finish = () => {
-    setRunning(false);
     setTimer((tm) => finishTimer(tm));
+    engine.finish();
   };
+
+  // il timer scorre solo mentre l'audio suona davvero: si ferma in pausa,
+  // in avvio non riuscito e durante le interruzioni di sistema
+  useEffect(() => {
+    const t = Date.now();
+    setTimer((tm) => (playing ? resumeTimer(tm, t) : pauseTimer(tm, t)));
+    setNow(t);
+  }, [playing]);
 
   // Cambiare preset non tocca il timer; se l'audio è fermo, il tocco avvia l'ascolto.
   const choosePreset = (p) => {
     setPresetId(p.id);
-    if (!playing) start();
+    if (!active) start();
   };
 
   // Una nuova durata sostituisce il residuo; "No" lo disattiva senza fermare l'audio.
@@ -154,6 +157,8 @@ export default function App() {
   const remainingMs = timerRemaining(timer, now);
   const remaining = formatRemaining(remainingMs);
   const timerPaused = remainingMs != null && timer.endAt == null;
+  const button = playButton(playback, remainingMs != null);
+  const message = playbackMessage(playback);
 
   const info = describe(settings);
 
@@ -194,8 +199,14 @@ export default function App() {
       </button>
 
       <div className="controls">
-        <button type="button" className={`play${playing ? " on" : ""}`} onClick={playing ? pause : start}>
-          {playing ? "❚❚ Pausa" : timerPaused ? "▶ Riprendi" : "▶ Avvia"}
+        <button
+          type="button"
+          className={`play${active ? " on" : ""}`}
+          onClick={button.action === "pause" ? pause : start}
+          disabled={!button.action}
+          aria-busy={playback.status === "starting"}
+        >
+          {button.label}
         </button>
         <button type="button" className="adjust" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -206,6 +217,11 @@ export default function App() {
           <span>Regola</span>
         </button>
       </div>
+
+      {/* sempre presente, così gli screen reader annunciano il messaggio quando compare */}
+      <p className="status-msg" role="status" aria-live="polite" hidden={!message}>
+        {message}
+      </p>
 
       {PRESET_GROUPS.map((group) => (
         <section

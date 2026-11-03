@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { makeNatureBuffer } from "./natureSounds.js";
 import { enablePlaybackSession, startKeepAlive, stopKeepAlive } from "./background.js";
+import { initialPlayback, playbackReducer } from "./playbackState.js";
+
+// oltre questo tempo un resume() senza risposta conta come fallito
+const RESUME_TIMEOUT_MS = 4000;
 
 function makeNoiseBuffer(ctx, type) {
   const len = ctx.sampleRate * 6;
@@ -35,11 +39,23 @@ function makeNoiseBuffer(ctx, type) {
  * più un rumore colorato e un suono della natura in loop.
  * I parametri cambiano con transizioni morbide.
  */
+function applyParams(n, { beat, car, tone, noise, nature }) {
+  const t = n.ctx.currentTime;
+  n.oscL.frequency.setTargetAtTime(car, t, 0.3);
+  n.oscR.frequency.setTargetAtTime(car + beat, t, 0.3);
+  n.toneGain.gain.setTargetAtTime((tone / 100) * 0.35, t, 0.3);
+  n.noiseGain.gain.setTargetAtTime((noise / 100) * 0.5, t, 0.3);
+  n.natureGain.gain.setTargetAtTime((nature / 100) * 0.8, t, 0.4);
+}
+
 export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natureType, volume }) {
   const nodes = useRef(null);
   const wakeLock = useRef(null);
-  const [playing, setPlaying] = useState(false);
-  const playingRef = useRef(false);
+  const [playback, dispatch] = useReducer(playbackReducer, initialPlayback);
+  const intentRef = useRef("none"); // copia sincrona dell'intenzione, per i gestori di eventi
+  const tokenRef = useRef(0); // numero dell'ultima richiesta play/pausa
+  const params = useRef({});
+  params.current = { beat, car, tone, noise, nature, volume };
 
   const startNoise = useCallback((type) => {
     const n = nodes.current;
@@ -76,7 +92,10 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
 
   const build = useCallback(() => {
     const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) throw new Error("unsupported");
     const ctx = new Ctx();
+    // sospensioni e interruzioni decise dal sistema (telefonate, altre app, Siri)
+    ctx.onstatechange = () => dispatch({ type: "CONTEXT_STATE", state: ctx.state });
     const master = ctx.createGain();
     master.gain.value = 0;
     const analyser = ctx.createAnalyser();
@@ -107,22 +126,19 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
       ctx, master, analyser, toneGain, noiseGain, natureGain, oscL, oscR,
       noiseSrc: null, noiseType, natureSrc: null, natureType, natureCache: {},
     };
+    applyParams(nodes.current, params.current);
     startNoise(noiseType);
     startNature(natureType);
   }, [noiseType, natureType, startNoise, startNature]);
 
   // aggiorna frequenze e volumi
   useEffect(() => {
-    const n = nodes.current;
-    if (!n) return;
-    const t = n.ctx.currentTime;
-    n.oscL.frequency.setTargetAtTime(car, t, 0.3);
-    n.oscR.frequency.setTargetAtTime(car + beat, t, 0.3);
-    n.toneGain.gain.setTargetAtTime((tone / 100) * 0.35, t, 0.3);
-    n.noiseGain.gain.setTargetAtTime((noise / 100) * 0.5, t, 0.3);
-    n.natureGain.gain.setTargetAtTime((nature / 100) * 0.8, t, 0.4);
-    if (playing) n.master.gain.setTargetAtTime(volume / 100, t, 0.2);
-  }, [beat, car, tone, noise, nature, volume, playing]);
+    if (nodes.current) applyParams(nodes.current, params.current);
+    if (nodes.current && intentRef.current === "play") {
+      const n = nodes.current;
+      n.master.gain.setTargetAtTime(volume / 100, n.ctx.currentTime, 0.2);
+    }
+  }, [beat, car, tone, noise, nature, volume]);
 
   // cambia suono della natura
   useEffect(() => {
@@ -140,36 +156,77 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     startNoise(noiseType);
   }, [noiseType, startNoise]);
 
-  const setRunning = useCallback(async (on) => {
-    // va impostata prima di creare o riprendere il contesto audio
-    if (on) enablePlaybackSession();
-    if (!nodes.current) build();
+  const releaseWakeLock = async () => {
+    try { await wakeLock.current?.release(); } catch { /* ignora */ }
+    wakeLock.current = null;
+  };
+
+  // Avvio o ripresa. Lo stato diventa "playing" solo se il contesto audio sta davvero suonando.
+  const play = useCallback(async () => {
+    const token = ++tokenRef.current;
+    intentRef.current = "play";
+    dispatch({ type: "REQUEST_PLAY", token });
+    try {
+      // va impostata prima di creare o riprendere il contesto audio
+      enablePlaybackSession();
+      if (!nodes.current) build();
+    } catch {
+      dispatch({ type: "PLAY_FAIL", token, reason: "unsupported" });
+      return false;
+    }
     const n = nodes.current;
     if (n.ctx.state !== "running") {
-      try { await n.ctx.resume(); } catch { /* riprova al prossimo tocco */ }
+      try {
+        await Promise.race([
+          n.ctx.resume(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), RESUME_TIMEOUT_MS)),
+        ]);
+      } catch { /* valutato sotto dallo stato effettivo */ }
+    }
+    // nel frattempo l'utente ha chiesto altro: questo avvio non conta più
+    if (token !== tokenRef.current) return false;
+    if (n.ctx.state !== "running") {
+      dispatch({ type: "PLAY_FAIL", token, reason: "blocked" });
+      return false;
     }
     const t = n.ctx.currentTime;
     n.master.gain.cancelScheduledValues(t);
-    n.master.gain.setTargetAtTime(on ? volume / 100 : 0, t, on ? 0.6 : 0.25);
-    playingRef.current = on;
-    setPlaying(on);
-    if (on) {
-      startKeepAlive();
-      try { wakeLock.current = await navigator.wakeLock?.request("screen"); } catch { /* non disponibile */ }
-    } else {
-      stopKeepAlive();
-      try { await wakeLock.current?.release(); } catch { /* ignora */ }
-      wakeLock.current = null;
+    n.master.gain.setTargetAtTime(params.current.volume / 100, t, 0.6);
+    startKeepAlive();
+    dispatch({ type: "PLAY_OK", token });
+    try { wakeLock.current = await navigator.wakeLock?.request("screen"); } catch { /* non disponibile */ }
+    // pausa arrivata mentre si attendeva il blocco schermo
+    if (token !== tokenRef.current) await releaseWakeLock();
+    return true;
+  }, [build]);
+
+  // Pausa dell'utente (type "REQUEST_PAUSE") o fine sessione per timer (type "FINISH").
+  const halt = useCallback(async (type) => {
+    const token = ++tokenRef.current;
+    intentRef.current = type === "FINISH" ? "none" : "pause";
+    dispatch({ type, token });
+    const n = nodes.current;
+    if (n) {
+      const t = n.ctx.currentTime;
+      n.master.gain.cancelScheduledValues(t);
+      n.master.gain.setTargetAtTime(0, t, 0.25);
     }
-  }, [build, volume]);
+    stopKeepAlive();
+    await releaseWakeLock();
+  }, []);
+
+  const pause = useCallback(() => halt("REQUEST_PAUSE"), [halt]);
+  const finish = useCallback(() => halt("FINISH"), [halt]);
 
   // dopo una telefonata, un allarme o il ritorno in primo piano iOS può lasciare
-  // il contesto "interrupted" o "suspended": se l'utente stava ascoltando, riprendiamo
+  // il contesto "interrupted" o "suspended": se l'utente vuole ascoltare, si tenta la ripresa.
+  // L'esito arriva da onstatechange; se serve un tocco, lo stato resta "interrupted".
   useEffect(() => {
     const revive = async () => {
       const n = nodes.current;
-      if (!n || !playingRef.current || n.ctx.state === "running") return;
+      if (!n || intentRef.current !== "play" || n.ctx.state === "running") return;
       try { await n.ctx.resume(); } catch { /* serve un tocco dell'utente */ }
+      if (intentRef.current !== "play") return;
       startKeepAlive();
       if (document.visibilityState === "visible" && !wakeLock.current) {
         try { wakeLock.current = await navigator.wakeLock?.request("screen"); } catch { /* ignora */ }
@@ -199,5 +256,5 @@ export function useAudioEngine({ beat, car, tone, noise, noiseType, nature, natu
     stopKeepAlive();
   }, []);
 
-  return { playing, setRunning, getAnalyser: () => nodes.current?.analyser ?? null };
+  return { playback, play, pause, finish };
 }
