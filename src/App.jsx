@@ -1,32 +1,33 @@
-import { useEffect, useState } from "react";
-import {
-  PRESETS, PRESET_GROUPS, NOISE_LABELS, NATURE_LABELS, TIMER_OPTIONS, bandOf, presetSubtitle,
-} from "./presets.js";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { PRESETS, PRESET_GROUPS, NOISE_LABELS, NATURE_LABELS, bandOf, presetSubtitle, kindOf } from "./presets.js";
 import { useAudioEngine } from "./audio/useAudioEngine.js";
 import { updateMediaSession } from "./audio/background.js";
 import Scope from "./components/Scope.jsx";
-import Slider from "./components/Slider.jsx";
 import UpdateBanner from "./components/UpdateBanner.jsx";
 import TabBar from "./components/TabBar.jsx";
+import AdjustSheet from "./components/AdjustSheet.jsx";
 
 const TABS = [
   { id: "needs", label: "Esigenze" },
   { id: "nature", label: "Natura" },
   { id: "solfeggio", label: "Solfeggio" },
-  { id: "settings", label: "Regola" },
 ];
-const TAB_KEY = "onde-quiete-tab";
 
-function savedTab() {
+// chiavi usate per ricordare le scelte su questo dispositivo
+const STORE = { tab: "onde-quiete-tab", tweaks: "onde-quiete-tweaks", preset: "onde-quiete-preset", volume: "onde-quiete-volume" };
+const TWEAKABLE = ["beat", "car", "tone", "noise", "noiseType", "nature", "natureType"];
+
+function load(key, fallback) {
   try {
-    const t = localStorage.getItem(TAB_KEY);
-    return TABS.some((x) => x.id === t) ? t : "needs";
+    const raw = localStorage.getItem(key);
+    return raw == null ? fallback : JSON.parse(raw);
   } catch {
-    return "needs";
+    return fallback;
   }
 }
-
-const CUSTOM_COLOR = "#7fd1c4";
+function save(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* memoria non disponibile */ }
+}
 
 // cosa mostrare in grande nel riquadro dell'oscilloscopio
 function describe(s) {
@@ -42,27 +43,61 @@ function describe(s) {
   return { band: "solo rumore", big: "—", small: `rumore ${NOISE_LABELS[s.noiseType].toLowerCase()}` };
 }
 
+const merge = (preset, tweak) => ({ ...preset, ...(tweak || {}) });
+
 export default function App() {
-  const [settings, setSettings] = useState({ ...PRESETS[0] });
-  const [volume, setVolume] = useState(70);
+  const [presetId, setPresetId] = useState(() => {
+    const id = load(STORE.preset, PRESETS[0].id);
+    return PRESETS.some((p) => p.id === id) ? id : PRESETS[0].id;
+  });
+  // modifiche dell'utente, separate per ogni preset: { relax: { beat: 9 }, rain: { nature: 60 } }
+  const [tweaks, setTweaks] = useState(() => load(STORE.tweaks, {}));
+  const [volume, setVolume] = useState(() => load(STORE.volume, 70));
   const [timerMin, setTimerMin] = useState(0);
   const [endAt, setEndAt] = useState(0);
   const [remaining, setRemaining] = useState("");
-  const [tab, setTab] = useState(savedTab);
+  const [tab, setTab] = useState(() => {
+    const t = load(STORE.tab, "needs");
+    return TABS.some((x) => x.id === t) ? t : "needs";
+  });
+  const [sheetOpen, setSheetOpen] = useState(false);
 
-  const selectTab = (id) => {
-    setTab(id);
-    try { localStorage.setItem(TAB_KEY, id); } catch { /* memoria non disponibile */ }
-  };
+  const preset = PRESETS.find((p) => p.id === presetId);
+  const settings = useMemo(() => merge(preset, tweaks[presetId]), [preset, tweaks, presetId]);
+  const kind = kindOf(presetId);
+  const modified = Object.keys(tweaks[presetId] || {}).length > 0;
+  const currentTab = PRESET_GROUPS.find((g) => g.presets.some((p) => p.id === presetId))?.id;
 
-  // la scheda che contiene il preset in ascolto riceve un pallino nella barra
-  const currentTab =
-    settings.id === "custom" ? "settings" : PRESET_GROUPS.find((g) => g.presets.some((p) => p.id === settings.id))?.id;
+  useEffect(() => save(STORE.tweaks, tweaks), [tweaks]);
+  useEffect(() => save(STORE.preset, presetId), [presetId]);
+  useEffect(() => save(STORE.volume, volume), [volume]);
 
   const { playing, setRunning } = useAudioEngine({ ...settings, volume });
 
-  const update = (key) => (value) =>
-    setSettings((s) => ({ ...s, [key]: value, id: "custom", name: "Personalizzato", color: CUSTOM_COLOR }));
+  const selectTab = (id) => {
+    setTab(id);
+    save(STORE.tab, id);
+  };
+
+  const setValue = (key, value) => {
+    if (!TWEAKABLE.includes(key)) return;
+    setTweaks((all) => {
+      const mine = { ...(all[presetId] || {}) };
+      if (preset[key] === value) delete mine[key]; // tornato al valore originale
+      else mine[key] = value;
+      const next = { ...all };
+      if (Object.keys(mine).length) next[presetId] = mine;
+      else delete next[presetId];
+      return next;
+    });
+  };
+
+  const resetPreset = () =>
+    setTweaks((all) => {
+      const next = { ...all };
+      delete next[presetId];
+      return next;
+    });
 
   const start = () => {
     setRunning(true);
@@ -75,7 +110,7 @@ export default function App() {
   };
 
   const choosePreset = (p) => {
-    setSettings({ ...p });
+    setPresetId(p.id);
     if (!playing) start();
   };
 
@@ -84,6 +119,8 @@ export default function App() {
     setEndAt(m && playing ? Date.now() + m * 60000 : 0);
     if (!m) setRemaining("");
   };
+
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
 
   // conto alla rovescia dello spegnimento automatico
   useEffect(() => {
@@ -122,23 +159,36 @@ export default function App() {
         <span className="hint">🎧 usa le cuffie</span>
       </header>
 
-      <div className="scope">
+      <button type="button" className="scope" onClick={() => setSheetOpen(true)} aria-label={`Regola ${settings.name}`}>
         <Scope {...settings} playing={playing} />
-        <div className="readout">
-          <div>
-            <div className="mode">{settings.name}</div>
-            <div className="band">{info.band}</div>
-          </div>
-          <div className="hz">
+        <span className="readout">
+          <span>
+            <span className="mode">
+              {settings.name}
+              {modified && <span className="badge">modificato</span>}
+            </span>
+            <span className="band">{info.band}</span>
+          </span>
+          <span className="hz">
             <span>{info.big}</span>
-            <small>{info.small}</small>
-          </div>
-        </div>
-      </div>
-
-      <button type="button" className={`play${playing ? " on" : ""}`} onClick={playing ? stop : start}>
-        {playing ? "❚❚ Pausa" : "▶ Avvia"}
+            <small>{remaining ? `si spegne tra ${remaining}` : info.small}</small>
+          </span>
+        </span>
       </button>
+
+      <div className="controls">
+        <button type="button" className={`play${playing ? " on" : ""}`} onClick={playing ? stop : start}>
+          {playing ? "❚❚ Pausa" : "▶ Avvia"}
+        </button>
+        <button type="button" className="adjust" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+            <circle cx="16" cy="7" r="2" />
+            <circle cx="10" cy="17" r="2" />
+          </svg>
+          <span>Regola</span>
+        </button>
+      </div>
 
       {PRESET_GROUPS.map((group) => (
         <section
@@ -151,83 +201,51 @@ export default function App() {
         >
           <h2 className="label">{group.title}</h2>
           <div className={`grid${group.presets.length === 4 ? " grid4" : ""}`}>
-            {group.presets.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className="chip"
-                aria-pressed={settings.id === p.id}
-                onClick={() => choosePreset(p)}
-              >
-                <i style={{ background: p.color }} />
-                <b>{p.name}</b>
-                <span>{presetSubtitle(p)}</span>
-              </button>
-            ))}
+            {group.presets.map((p) => {
+              const shown = merge(p, tweaks[p.id]);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="chip"
+                  aria-pressed={presetId === p.id}
+                  onClick={() => choosePreset(p)}
+                >
+                  <i style={{ background: p.color }} />
+                  <b>{p.name}</b>
+                  <span>
+                    {presetSubtitle(shown)}
+                    {tweaks[p.id] && " · su misura"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
           {group.note && <p className="note groupnote">{group.note}</p>}
         </section>
       ))}
 
-      <section
-        id="panel-settings"
-        role="tabpanel"
-        aria-labelledby="tab-settings"
-        hidden={tab !== "settings"}
-        className="panel"
-      >
-      <h2 className="label">Regola il suono</h2>
-      <div className="ctrl">
-        <p className="label sub">Tono</p>
-        <Slider id="beat" label="Battimento" value={settings.beat} min={0} max={40} step={0.5} unit=" Hz" onChange={update("beat")} />
-        <Slider id="car" label="Frequenza" value={settings.car} min={80} max={700} unit=" Hz" onChange={update("car")} />
-        <Slider id="tone" label="Volume tono" value={settings.tone} min={0} max={100} unit="%" onChange={update("tone")} />
+      <TabBar
+        tabs={TABS.map((t) => ({ ...t, hasCurrent: t.id === currentTab }))}
+        active={tab}
+        onChange={selectTab}
+        playing={playing}
+      />
 
-        <p className="label sub">Natura</p>
-        <div className="row">
-          <label htmlFor="natype">Suono</label>
-          <select id="natype" className="span2" value={settings.natureType} onChange={(e) => update("natureType")(e.target.value)}>
-            {Object.entries(NATURE_LABELS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
-        </div>
-        <Slider id="nature" label="Volume natura" value={settings.nature} min={0} max={100} unit="%" onChange={update("nature")} />
-
-        <p className="label sub">Rumore</p>
-        <div className="row">
-          <label htmlFor="ntype">Colore</label>
-          <select id="ntype" className="span2" value={settings.noiseType} onChange={(e) => update("noiseType")(e.target.value)}>
-            {Object.entries(NOISE_LABELS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
-        </div>
-        <Slider id="noise" label="Volume rumore" value={settings.noise} min={0} max={100} unit="%" onChange={update("noise")} />
-
-        <p className="label sub">Generale</p>
-        <Slider id="vol" label="Volume" value={volume} min={0} max={100} unit="%" onChange={setVolume} />
-      </div>
-
-      <div className="timer">
-        <label htmlFor="timer" className="note">Spegnimento automatico</label>
-        <select id="timer" value={timerMin} onChange={(e) => changeTimer(Number(e.target.value))}>
-          {TIMER_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        <span className="note">{remaining}</span>
-      </div>
-
-      <p className="note">
-        I battimenti binaurali funzionano solo in cuffia: ogni orecchio riceve una frequenza diversa e il cervello
-        percepisce la differenza. Con battimento a 0 Hz senti un tono puro. Le ricerche sui benefici danno risultati
-        contrastanti: usala come sottofondo, non come terapia. Su iPhone l'ascolto a schermo bloccato richiede iOS 17.5
-        o successivo. Tieni il volume basso. <b>Non usarla alla guida.</b>
-      </p>
-      </section>
-
-      <TabBar tabs={TABS.map((t) => ({ ...t, hasCurrent: t.id === currentTab }))} active={tab} onChange={selectTab} playing={playing} />
+      <AdjustSheet
+        open={sheetOpen}
+        onClose={closeSheet}
+        kind={kind}
+        settings={settings}
+        onSet={setValue}
+        modified={modified}
+        onReset={resetPreset}
+        volume={volume}
+        onVolume={setVolume}
+        timerMin={timerMin}
+        onTimer={changeTimer}
+        remaining={remaining}
+      />
     </main>
   );
 }

@@ -58,13 +58,30 @@ export const NATURE_LABELS = {
   storm: "Temporale",
 };
 
+export const NATURE_SHORT = {
+  rain: "Pioggia",
+  waves: "Onde",
+  wind: "Vento",
+  fire: "Camino",
+  storm: "Temporale",
+};
+
 export const TIMER_OPTIONS = [
-  { value: 0, label: "Mai" },
-  { value: 10, label: "10 min" },
-  { value: 25, label: "25 min (pomodoro)" },
-  { value: 45, label: "45 min" },
-  { value: 60, label: "60 min" },
+  { value: 0, label: "Mai", short: "No" },
+  { value: 10, label: "10 min", short: "10′" },
+  { value: 25, label: "25 min (pomodoro)", short: "25′" },
+  { value: 45, label: "45 min", short: "45′" },
+  { value: 60, label: "60 min", short: "60′" },
 ];
+
+// che tipo di suono è un preset: decide quali regolazioni mostrare
+export function kindOf(presetId) {
+  const group = PRESET_GROUPS.find((g) => g.presets.some((p) => p.id === presetId));
+  const preset = PRESETS.find((p) => p.id === presetId);
+  if (!group || !preset) return "binaural";
+  if (group.id === "needs") return preset.tone > 0 ? "binaural" : "noise";
+  return group.id; // "nature" o "solfeggio"
+}
 
 export function bandOf(beat) {
   if (beat === 0) return "tono puro";
