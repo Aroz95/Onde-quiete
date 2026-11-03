@@ -73,7 +73,7 @@ canvas { display: block; width: 100%; height: 180px; }
   backdrop-filter: saturate(180%) blur(20px);
   border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
 }
-.tabbar-inner { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+.tabbar-inner { max-width: 560px; margin: 0 auto; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
 .tab {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
   padding: 8px 4px 6px; min-height: 56px; border: 0; background: none; color: var(--muted);
